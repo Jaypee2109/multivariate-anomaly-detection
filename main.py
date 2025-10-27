@@ -10,6 +10,7 @@ from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import Vocab
 from datasets import load_dataset
 from huggingface_hub import login
+from torchtext.vocab import build_vocab_from_iterator
 
 from transformer import TransformerModel
 
@@ -36,29 +37,24 @@ counter = Counter()
 for line in train_texts:
     counter.update(tokenizer(line))
 
-vocab = Vocab(counter)
+
+def yield_tokens(texts):
+    for line in texts:
+        yield tokenizer(line)
 
 
-from collections import defaultdict
-
-unk_index = 0  # By convention, first special token is <unk>
-vocab_dict = {token: i + 1 for i, token in enumerate(counter)}  # start from 1
-vocab_dict["<unk>"] = 0
-
-
-def lookup_token(token):
-    return vocab_dict.get(token, 0)  # 0 is <unk>
+vocab = build_vocab_from_iterator(yield_tokens(train_texts), specials=["<unk>"])
+vocab.set_default_index(vocab["<unk>"])
 
 
 def data_process(raw_texts):
     data = [
-        torch.tensor(
-            [lookup_token(token) for token in tokenizer(item)], dtype=torch.long
-        )
-        for item in raw_texts
+        torch.tensor(vocab(tokenizer(item)), dtype=torch.long) for item in raw_texts
     ]
     return torch.cat(tuple(filter(lambda t: t.numel() > 0, data)))
 
+
+ntokens = len(vocab)
 
 train_data = data_process(train_texts)
 val_data = data_process(val_texts)
