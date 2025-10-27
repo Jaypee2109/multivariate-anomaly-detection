@@ -12,6 +12,7 @@ from datasets import load_dataset
 from huggingface_hub import login
 from torchtext.vocab import build_vocab_from_iterator
 
+from inference import generate_text
 from transformer import TransformerModel
 
 load_dotenv()
@@ -182,3 +183,4 @@ for epoch in range(1, epochs + 1):
         best_model = model
 
     scheduler.step()
+torch.save(best_model.state_dict(), "transformer_best.pt")
