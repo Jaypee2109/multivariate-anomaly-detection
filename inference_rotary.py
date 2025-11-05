@@ -2,9 +2,8 @@ import torch
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 from datasets import load_dataset
-from transformer import (
-    TransformerModel,
-)
+from transformer import TransformerModel, TransformerModelRotary
+import torch.nn.functional as F
 
 # -------------------------------
 # 1. Load dataset and build vocab
@@ -39,15 +38,28 @@ dropout = 0.2
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 print("Loading trained model weights...")
-model = TransformerModel(ntokens, emsize, nhead, nhid, nlayers, dropout).to(device)
-model.load_state_dict(torch.load("models/transformer_best.pt", map_location=device))
+model = TransformerModelRotary(ntokens, emsize, nhead, nhid, nlayers, dropout).to(
+    device
+)
+model.load_state_dict(
+    torch.load("transformer_best_20251106_000420.pt", map_location=device)
+)
 model.eval()
 
 
 # -------------------------------
 # 3. Text generation function
 # -------------------------------
-def generate_text(model, prompt, vocab, tokenizer, max_len=50, temperature=1.0):
+def generate_text(
+    model,
+    prompt,
+    vocab,
+    tokenizer,
+    max_len=50,
+    temperature=0.7,
+    top_p=0.8,
+    repeat_penalty=1.2,
+):
     model.eval()
     tokens = tokenizer(prompt)
     input_ids = torch.tensor(
@@ -62,8 +74,23 @@ def generate_text(model, prompt, vocab, tokenizer, max_len=50, temperature=1.0):
                 input_ids.device
             )
             output = model(generated, src_mask)
-            next_token_logits = output[-1, 0, :] / temperature
-            next_token = torch.multinomial(torch.softmax(next_token_logits, dim=-1), 1)
+            logits = output[-1, 0, :] / temperature
+
+            # Apply repeat penalty only for last 10 tokens
+            recent_tokens = generated[-10:].squeeze()
+            for token_id in recent_tokens:
+                logits[token_id] /= repeat_penalty
+
+            # Top-p (nucleus) sampling
+            sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+            probs = F.softmax(sorted_logits, dim=-1)
+            cumulative_probs = torch.cumsum(probs, dim=-1)
+            sorted_indices_to_remove = cumulative_probs > top_p
+            sorted_indices_to_remove[0] = False  # always keep at least 1 token
+            probs[sorted_indices_to_remove] = 0.0
+            probs = probs / probs.sum()
+
+            next_token = sorted_indices[torch.multinomial(probs, 1)]
             generated = torch.cat([generated, next_token.unsqueeze(0)], dim=0)
 
     generated_tokens = [
@@ -76,7 +103,7 @@ def generate_text(model, prompt, vocab, tokenizer, max_len=50, temperature=1.0):
 # 4. Run inference
 # -------------------------------
 if __name__ == "__main__":
-    prompt = "What is up with"
+    prompt = "What is "
     print(f"\nPrompt: {prompt}")
     generated_text = generate_text(
         model, prompt, vocab, tokenizer, max_len=100, temperature=0.8

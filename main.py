@@ -1,18 +1,14 @@
+from datetime import datetime
 import math
 import os
 import time
 from collections import Counter
 from dotenv import load_dotenv
 import torch
-from torch import nn, optim
-from torch.utils.data import DataLoader
 from torchtext.data.utils import get_tokenizer
-from torchtext.vocab import Vocab
 from datasets import load_dataset
 from huggingface_hub import login
 from torchtext.vocab import build_vocab_from_iterator
-
-from inference import generate_text
 from transformer import TransformerModel
 
 load_dotenv()
@@ -23,9 +19,7 @@ dataset = load_dataset(
     "Salesforce/wikitext", "wikitext-2-v1"
 )  # You can pick other configs such as "wikitext-103-v1" too
 
-# 2) Inspect splits & choose
 print(dataset)
-# You'll see splits: train, validation, test. :contentReference[oaicite:2]{index=2}
 
 train_texts = dataset["train"]["text"]
 val_texts = dataset["validation"]["text"]
@@ -98,7 +92,7 @@ nhead = 2  # the number of heads in the multiheadattention models
 dropout = 0.2  # the dropout value
 model = TransformerModel(ntokens, emsize, nhead, nhid, nlayers, dropout).to(device)
 
-criterion = nn.CrossEntropyLoss()
+criterion = torch.nn.CrossEntropyLoss()
 lr = 5.0  # learning rate
 optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
@@ -183,4 +177,6 @@ for epoch in range(1, epochs + 1):
         best_model = model
 
     scheduler.step()
-torch.save(best_model.state_dict(), "transformer_best.pt")
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+torch.save(best_model.state_dict(), f"transformer_best_{timestamp}.pt")
