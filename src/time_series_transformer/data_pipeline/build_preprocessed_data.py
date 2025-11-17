@@ -1,4 +1,5 @@
 from pathlib import Path
+import pandas as pd
 
 from time_series_transformer.config import (
     KAGGLE_DATASETS,
@@ -17,8 +18,6 @@ def save_processed_dataset(
     dataset_name: str,
     processed: dict[str, "pd.DataFrame"],
 ) -> None:
-
-    import pandas as pd  # Lazy import
 
     base = PROCESSED_DATA_DIR / dataset_name
     base.mkdir(parents=True, exist_ok=True)

@@ -5,6 +5,7 @@ from typing import Dict
 import pandas as pd
 
 from time_series_transformer.config import RAW_DATA_DIR, ensure_directories
+from time_series_transformer.data_pipeline.data_download import download_all_datasets
 
 
 def load_dataset(name: str) -> Dict[str, pd.DataFrame]:
@@ -61,7 +62,6 @@ def load_all_datasets(dataset_names: list[str]) -> dict[str, Dict[str, pd.DataFr
 
 
 if __name__ == "__main__":
-    from data_download import download_all_datasets
 
     download_all_datasets()
     all_data = load_all_datasets(["smd_onmiad", "nasa_smap_msl", "nab"])
