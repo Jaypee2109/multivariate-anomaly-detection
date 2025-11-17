@@ -1,0 +1,29 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# --- Virtual Environments ---
+.venv/
+venv/
+
+# --- VS Code (local settings) ---
+.vscode/
+
+# --- Packaging / build artifacts ---
+*.egg-info/
+dist/
+build/
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# Ignore ALL files in the data folders ...
+data/raw/*
+data/processed/*
+
+# ... except the placeholder file .gitkeep
+!data/raw/.gitkeep
+!data/processed/.gitkeep

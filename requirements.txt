@@ -1,0 +1,8 @@
+kagglehub
+pandas
+numpy
+torch
+torchtext
+datasets
+huggingface_hub
+python-dotenv
