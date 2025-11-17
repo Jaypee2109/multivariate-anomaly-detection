@@ -9,7 +9,7 @@ from time_series_transformer.config import (
 if __name__ == "__main__":
 
     csv_path = (
-        RAW_DATA_DIR / "nab" / "realKnownCause" / "realKnownCause" / "nyc_taxi.csv"
+        RAW_DATA_DIR / "nab" / "realTweets" / "realTweets" / "Twitter_volume_GOOG.csv"
     )
 
     run_eda_pipeline(csv_path, timestamp_col="timestamp", value_col="value")
