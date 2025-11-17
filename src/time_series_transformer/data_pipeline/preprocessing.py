@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Optional
+from pathlib import Path
 
 import pandas as pd
 
@@ -52,6 +53,33 @@ def standard_scale(
             df[col] = 0.0
         else:
             df[col] = (df[col] - mean) / std
+
+    return df
+
+
+def load_csv_to_df(
+    path: str | Path,
+    parse_dates: Optional[Iterable[str]] = None,
+    index_col: Optional[str] = None,
+    **read_csv_kwargs,
+) -> pd.DataFrame:
+
+    path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    if path.suffix.lower() != ".csv":
+        raise ValueError(f"Expected a .csv file, got: {path.suffix} ({path})")
+
+    df = pd.read_csv(path, parse_dates=parse_dates, **read_csv_kwargs)
+
+    if index_col is not None:
+        if index_col not in df.columns:
+            raise KeyError(
+                f"Index column '{index_col}' not found in columns: {df.columns.tolist()}"
+            )
+        df = df.set_index(index_col)
 
     return df
 

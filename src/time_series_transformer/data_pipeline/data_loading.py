@@ -8,7 +8,7 @@ from time_series_transformer.config import RAW_DATA_DIR, ensure_directories
 from time_series_transformer.data_pipeline.data_download import download_all_datasets
 
 
-def load_dataset(name: str) -> Dict[str, pd.DataFrame]:
+def load_dataset(directory: Path, name: str) -> Dict[str, pd.DataFrame]:
     """
     Recursively loads all CSV files under data/raw/<name>/ into a dict:
 
@@ -19,7 +19,7 @@ def load_dataset(name: str) -> Dict[str, pd.DataFrame]:
       - files starting with "._" (resource forks)
     """
     ensure_directories()
-    root = RAW_DATA_DIR / name
+    root = directory / name
     if not root.exists():
         raise FileNotFoundError(f"Raw data for dataset '{name}' not found: {root}.\n")
 

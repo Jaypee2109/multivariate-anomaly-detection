@@ -6,3 +6,5 @@ torchtext
 datasets
 huggingface_hub
 python-dotenv
+holoviews
+bokeh
