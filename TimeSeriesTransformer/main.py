@@ -3,12 +3,11 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import glob
-from datetime import datetime
 from transformer import TransformerTimeSeries
 import pandas as pd
 
 # -------------------------------------------------
-# Setup for Apple Silicon (M1/M2/M3)
+# Setup for Apple Silicon
 # -------------------------------------------------
 torch.set_float32_matmul_precision("medium")
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -17,77 +16,41 @@ device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 # -------------------------
 # Load and concatenate datasets
 # -------------------------
-def load_and_concat_datasets(data_dir):
-    all_train_X, all_train_y, all_train_tf = [], [], []
+def load_and_concat_datasets(data_dir, lag=12):
+
+    all_X, all_y, all_TF = [], [], []
     val_sets = []
 
     for file in glob.glob(f"{data_dir}/*.csv"):
-        df = pd.read_csv(file, parse_dates=["timestamp"])
-        df = df.sort_values("timestamp").reset_index(drop=True)
+        df = pd.read_csv(file, parse_dates=["timestamp"]).sort_values("timestamp")
 
-        # Split train / val 80/20
-        split_idx = int(0.8 * len(df))
-        train_df = df.iloc[:split_idx]
-        val_df = df.iloc[split_idx:]
+        split = int(0.8 * len(df))
 
-        # Convert to tensors
-        train_values = torch.tensor(train_df["value"].values, dtype=torch.float32)
-        val_values = torch.tensor(val_df["value"].values, dtype=torch.float32)
+        # train
+        X, y, TF = build_windows(
+            df["value"].values[:split],
+            df["timestamp"].values[:split],
+            lag,
+        )
 
-        # Lag features
-        lag = 12
+        all_X.append(X)
+        all_y.append(y)
+        all_TF.append(TF)
 
-        def create_lag_tensor(series):
-            return torch.stack(
-                [
-                    series[i : -(lag - i - 1)] if i < lag - 1 else series[i:]
-                    for i in range(lag)
-                ],
-                dim=-1,
-            )
+        # val
+        Xv, yv, TFv = build_windows(
+            df["value"].values[split:],
+            df["timestamp"].values[split:],
+            lag,
+        )
 
-        X_train = create_lag_tensor(train_values[:-1]).unsqueeze(
-            -1
-        )  # (seq_len_lag, lag)
-        y_train = train_values[lag:].unsqueeze(-1)
+        val_sets.append((Xv, yv, TFv, file, df["timestamp"].values[split:]))
 
-        X_val = create_lag_tensor(val_values[:-1]).unsqueeze(-1)
-        y_val = val_values[lag:].unsqueeze(-1)
+    X_all = torch.cat(all_X, dim=0)
+    y_all = torch.cat(all_y, dim=0)
+    TF_all = torch.cat(all_TF, dim=0)
 
-        # Time features
-        def create_time_features(df):
-            """
-            df: pandas DataFrame with 'timestamp' column
-            Returns: torch tensor of shape (seq_len, 2) with normalized hour and weekday
-            """
-            ts = pd.to_datetime(
-                df["timestamp"].values
-            )  # ensures each is a pd.Timestamp
-            hours = torch.tensor(
-                [t.hour / 23.0 for t in ts], dtype=torch.float32
-            ).unsqueeze(-1)
-            weekdays = torch.tensor(
-                [t.weekday() / 6.0 for t in ts], dtype=torch.float32
-            ).unsqueeze(-1)
-            return torch.cat([hours, weekdays], dim=-1)
-
-        tf_train = create_time_features(train_df)
-        tf_val = create_time_features(val_df)
-
-        # Add to master training set
-        all_train_X.append(X_train)
-        all_train_y.append(y_train)
-        all_train_tf.append(tf_train)
-
-        # Save val set for later predictions
-        val_sets.append((X_val, y_val, tf_val, file, val_df["timestamp"].values))
-
-    # Concatenate all datasets along the first dimension (time axis)
-    X_train_all = torch.cat(all_train_X, dim=0)
-    y_train_all = torch.cat(all_train_y, dim=0)
-    TF_train_all = torch.cat(all_train_tf, dim=0)
-
-    return X_train_all, y_train_all, TF_train_all, val_sets
+    return X_all, y_all, TF_all, val_sets
 
 
 # -------------------------
@@ -136,34 +99,34 @@ def compute_time_features(ts_list):
     return np.stack([hours, weekdays], axis=-1)  # (seq_len, 2)
 
 
-def build_windows(values, timestamps, seq_len):
+def build_windows(values, timestamps, lag):
     """
     Returns:
-      X: (num_windows, seq_len, 1)
-      y: (num_windows, 1)
-      TF: (num_windows, seq_len, 2)
+        X:  (N, lag, 1)
+        y:  (N, 1)
+        TF: (N, lag, 2)
     """
-    time_features = compute_time_features(timestamps)
+    values = np.array(values, dtype=np.float32)
+    timestamps = pd.to_datetime(timestamps)
+
+    hours = np.array([t.hour / 23.0 for t in timestamps], dtype=np.float32)
+    weekdays = np.array([t.weekday() / 6.0 for t in timestamps], dtype=np.float32)
+    time_feats = np.stack([hours, weekdays], axis=-1)
 
     X_list = []
     y_list = []
     TF_list = []
 
-    for i in range(len(values) - seq_len - 1):
-        seq = values[i : i + seq_len]
-        nxt = values[i + seq_len]
-        ts_feats = time_features[i : i + seq_len]
+    for i in range(len(values) - lag):
+        X_list.append(values[i : i + lag])
+        y_list.append(values[i + lag])
+        TF_list.append(time_feats[i : i + lag])
 
-        X_list.append(seq)
-        y_list.append(nxt)
-        TF_list.append(ts_feats)
-
-    # Convert lists to numpy arrays FIRST (fast)
-    X = np.array(X_list, dtype=np.float32)[:, :, None]  # (N, seq_len, 1)
+    X = np.array(X_list, dtype=np.float32)[:, :, None]  # (N, lag, 1)
     y = np.array(y_list, dtype=np.float32)[:, None]  # (N, 1)
-    TF = np.array(TF_list, dtype=np.float32)  # (N, seq_len, 2)
+    TF = np.array(TF_list, dtype=np.float32)  # (N, lag, 2)
 
-    # THEN convert to torch tensors ONCE (no warning)
+    # THEN torchify
     return (
         torch.from_numpy(X),
         torch.from_numpy(y),
@@ -187,6 +150,7 @@ def train_model(
     y_val,
     TF_val,
     optimizer,
+    scheduler,
     criterion,
     epochs=20,
     batch_size=64,
@@ -194,149 +158,155 @@ def train_model(
 
     n_train = len(X_train)
     n_val = len(X_val)
-
     best_val = float("inf")
 
     for epoch in range(1, epochs + 1):
 
-        # ==========================
-        # TRAIN
-        # ==========================
+        # ---------- TRAIN ----------
         model.train()
         perm = torch.randperm(n_train)
 
-        train_loss = 0
-        batches = 0
+        total_loss = 0
 
         for i in range(0, n_train, batch_size):
             idx = perm[i : i + batch_size]
 
-            xb = X_train[idx].to(device)
+            xb = X_train[idx].to(device)  # (B, lag, 1)
+            tfb = TF_train[idx].to(device)  # (B, lag, 2)
+
+            inp = torch.cat([xb, tfb], dim=-1)  # (B, lag, 3)
+
             yb = y_train[idx].to(device)
-            tfb = TF_train[idx].to(device)
 
             optimizer.zero_grad()
-            out = model(xb, time_features=tfb)
-            loss = criterion(out, yb)
+            out = model(inp)
 
+            loss = criterion(out, yb)
             loss.backward()
+
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
+            scheduler.step()
 
-            train_loss += loss.item()
-            batches += 1
+            total_loss += loss.item()
 
-        avg_train = train_loss / batches
+        train_loss = total_loss / (n_train // batch_size)
 
-        # ==========================
-        # VALIDATION
-        # ==========================
+        # ---------- VALID ----------
         model.eval()
         val_loss = 0
-        val_batches = 0
 
         with torch.no_grad():
             for i in range(0, n_val, batch_size):
                 xb = X_val[i : i + batch_size].to(device)
-                yb = y_val[i : i + batch_size].to(device)
                 tfb = TF_val[i : i + batch_size].to(device)
+                yb = y_val[i : i + batch_size].to(device)
 
-                out = model(xb, time_features=tfb)
-                loss = criterion(out, yb)
+                inp = torch.cat([xb, tfb], dim=-1)
 
-                val_loss += loss.item()
-                val_batches += 1
+                out = model(inp)
+                val_loss += criterion(out, yb).item()
 
-        avg_val = val_loss / val_batches
+        val_loss /= n_val // batch_size
 
-        # ==========================
-        # STATUS
-        # ==========================
-        print(f"Epoch {epoch:02d} | Train: {avg_train:.4f} | Val: {avg_val:.4f}")
+        print(f"Epoch {epoch:02d} | Train: {train_loss:.4f} | Val: {val_loss:.4f}")
 
-        if avg_val < best_val:
-            best_val = avg_val
+        if val_loss < best_val:
+            best_val = val_loss
             torch.save(model.state_dict(), "best_model.pth")
 
         if device.type == "mps":
-            torch.mps.empty_cache()
+            pass  # MPS has no empty_cache()
 
 
-def forecast_autoregressive(model, init_window_vals, init_window_ts, steps):
-    """
-    init_window_vals: (150,) last seq_len values
-    init_window_ts:   (150,) timestamps aligned to those values
-    steps: number of steps to forecast
-    """
+def forecast_autoregressive(model, init_vals, init_ts, steps, lag=12):
+
     model.eval()
 
-    seq_len = len(init_window_vals)
+    current_vals = list(init_vals)
+    current_ts = list(pd.to_datetime(init_ts))
 
-    current_vals = init_window_vals.copy()
-    current_ts = init_ts.tolist()
-
-    predictions = []
+    preds = []
 
     for _ in range(steps):
-        # Build time features for the current full window
-        tf = compute_time_features(current_ts)
-        tf = torch.tensor(tf, dtype=torch.float32)[None, :, :]
 
-        x = torch.tensor(current_vals, dtype=torch.float32)[:, None]
-        x = x[None, :, :]
+        # build current lag window
+        vals = np.array(current_vals[-lag:], dtype=np.float32)
+        hours = np.array([t.hour / 23.0 for t in current_ts[-lag:]], dtype=np.float32)
+        wdays = np.array(
+            [t.weekday() / 6.0 for t in current_ts[-lag:]], dtype=np.float32
+        )
 
-        x = x.to(device)
-        tf = tf.to(device)
+        tf = np.stack([hours, wdays], axis=-1)  # (lag, 2)
+
+        x = torch.tensor(vals)[None, :, None]  # (1, lag, 1)
+        tf = torch.tensor(tf)[None, :, :]  # (1, lag, 2)
+
+        inp = torch.cat([x, tf], dim=-1).to(device)
 
         with torch.no_grad():
-            pred = model(x, tf).item()
+            pred = model(inp).item()
 
-        predictions.append(pred)
+        preds.append(pred)
 
-        # Slide window forward by 1
-        current_vals = np.append(current_vals[1:], pred)
-        current_ts = current_ts[1:] + [
-            current_ts[-1] + (current_ts[-1] - current_ts[-2])
-        ]
+        # extend window
+        current_vals.append(pred)
 
-    return predictions
+        delta = current_ts[-1] - current_ts[-2]
+        current_ts.append(current_ts[-1] + delta)
+
+    return preds
 
 
 # -------------------------
 # Load datasets
 # -------------------------
+lag = 90
 data_dir = "data/processed/nab/realTweets/realTweets"
-X_train_all, y_train_all, TF_train_all, val_sets = load_and_concat_datasets(data_dir)
 
-# -------------------------
-# Initialize model
-# -------------------------
+X_train, y_train, TF_train, val_sets = load_and_concat_datasets(data_dir, lag=lag)
+
+MODEL_DIM = 256
+NUM_HEADS = 16
+NUM_LAYERS = 16
+EPOCHS = 8
+BATCH_SIZE = 64
+
 model = TransformerTimeSeries(
-    input_dim=12 + 2,  # 12 lags + 2 time features
-    model_dim=128,
-    num_heads=8,
-    num_layers=2,
+    input_dim=1 + 2,  # raw value + 2 time_feats AFTER lagging
+    model_dim=MODEL_DIM,
+    num_heads=NUM_HEADS,
+    num_layers=NUM_LAYERS,
     dropout=0.1,
 ).to(device)
 
-criterion = torch.nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-# -------------------------
-# Train the model
-# -------------------------
+scheduler = torch.optim.lr_scheduler.OneCycleLR(
+    optimizer,
+    max_lr=1e-3,  # peak LR
+    steps_per_epoch=len(X_train),
+    epochs=EPOCHS,
+    pct_start=0.1,  # 10% of training = warmup
+    anneal_strategy="cos",  # cosine cooldown
+)
+
+
+# for now just use same val set — later fix properly
 train_model(
     model,
-    X_train_all,
-    y_train_all,
-    TF_train_all,
-    X_train_all,
-    y_train_all,
-    TF_train_all,  # Using same as val just for now
+    X_train,
+    y_train,
+    TF_train,
+    X_train,
+    y_train,
+    TF_train,
     optimizer,
+    scheduler,
     criterion,
-    epochs=25,
-    batch_size=64,
+    epochs=EPOCHS,
+    batch_size=BATCH_SIZE,
 )
 
 
