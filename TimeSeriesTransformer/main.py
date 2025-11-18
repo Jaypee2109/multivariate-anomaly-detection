@@ -1,11 +1,11 @@
-import os
-from dotenv import load_dotenv
-from huggingface_hub import login
 import torch
-from datasets import load_dataset
 import torch.nn as nn
 import torch.optim as optim
+import numpy as np
+import glob
+from datetime import datetime
 from transformer import TransformerTimeSeries
+import pandas as pd
 
 # -------------------------------------------------
 # Setup for Apple Silicon (M1/M2/M3)
@@ -13,282 +13,360 @@ from transformer import TransformerTimeSeries
 torch.set_float32_matmul_precision("medium")
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
-# -------------------------------------------------
-# Hugging Face login
-# -------------------------------------------------
-load_dotenv()
-token = os.getenv("TOKEN")
-login(token)
 
-# -------------------------------------------------
-# Load a specific Chronos dataset
-# -------------------------------------------------
-dataset = load_dataset("autogluon/chronos_datasets", "monash_m3_monthly")
+# -------------------------
+# Load and concatenate datasets
+# -------------------------
+def load_and_concat_datasets(data_dir):
+    all_train_X, all_train_y, all_train_tf = [], [], []
+    val_sets = []
 
-print(dataset)
+    for file in glob.glob(f"{data_dir}/*.csv"):
+        df = pd.read_csv(file, parse_dates=["timestamp"])
+        df = df.sort_values("timestamp").reset_index(drop=True)
 
-# -------------------------------------------------
-# Prepare input/output sequences
-# -------------------------------------------------
-window_size = 24
-horizon = 2
+        # Split train / val 80/20
+        split_idx = int(0.8 * len(df))
+        train_df = df.iloc[:split_idx]
+        val_df = df.iloc[split_idx:]
 
-# Take only the first half of the training set
-num_train_series = len(dataset["train"])
-half_train = dataset["train"].select(range(num_train_series))
+        # Convert to tensors
+        train_values = torch.tensor(train_df["value"].values, dtype=torch.float32)
+        val_values = torch.tensor(val_df["value"].values, dtype=torch.float32)
+
+        # Lag features
+        lag = 12
+
+        def create_lag_tensor(series):
+            return torch.stack(
+                [
+                    series[i : -(lag - i - 1)] if i < lag - 1 else series[i:]
+                    for i in range(lag)
+                ],
+                dim=-1,
+            )
+
+        X_train = create_lag_tensor(train_values[:-1]).unsqueeze(
+            -1
+        )  # (seq_len_lag, lag)
+        y_train = train_values[lag:].unsqueeze(-1)
+
+        X_val = create_lag_tensor(val_values[:-1]).unsqueeze(-1)
+        y_val = val_values[lag:].unsqueeze(-1)
+
+        # Time features
+        def create_time_features(df):
+            """
+            df: pandas DataFrame with 'timestamp' column
+            Returns: torch tensor of shape (seq_len, 2) with normalized hour and weekday
+            """
+            ts = pd.to_datetime(
+                df["timestamp"].values
+            )  # ensures each is a pd.Timestamp
+            hours = torch.tensor(
+                [t.hour / 23.0 for t in ts], dtype=torch.float32
+            ).unsqueeze(-1)
+            weekdays = torch.tensor(
+                [t.weekday() / 6.0 for t in ts], dtype=torch.float32
+            ).unsqueeze(-1)
+            return torch.cat([hours, weekdays], dim=-1)
+
+        tf_train = create_time_features(train_df)
+        tf_val = create_time_features(val_df)
+
+        # Add to master training set
+        all_train_X.append(X_train)
+        all_train_y.append(y_train)
+        all_train_tf.append(tf_train)
+
+        # Save val set for later predictions
+        val_sets.append((X_val, y_val, tf_val, file, val_df["timestamp"].values))
+
+    # Concatenate all datasets along the first dimension (time axis)
+    X_train_all = torch.cat(all_train_X, dim=0)
+    y_train_all = torch.cat(all_train_y, dim=0)
+    TF_train_all = torch.cat(all_train_tf, dim=0)
+
+    return X_train_all, y_train_all, TF_train_all, val_sets
 
 
-# -------------------------------------------------
-# Fast vectorized windowing with stride + sampling
-# -------------------------------------------------
-def create_windows_vectorized(target, window_size, horizon, stride=4, max_windows=300):
+# -------------------------
+# Autoregressive forecasting function
+# -------------------------
+def forecast_autoregressive(model, init_window_vals, init_window_ts, steps=20, lag=12):
     """
-    target: 1D list of float values
-    returns X: (num_windows, window_size, 1)
-            y: (num_windows, horizon)
-    """
-    t = torch.tensor(target, dtype=torch.float32)
-    total_len = window_size + horizon
-    # All sliding windows (vectorized, no loops)
-    windows = t.unfold(0, total_len, stride)  # shape: (num_windows, total_len)
-
-    if windows.shape[0] == 0:
-        return None, None  # skip very short series
-
-    # Split into X and y
-    X = windows[:, :window_size].unsqueeze(-1)  # (num_windows, window_size, 1)
-    y = windows[:, window_size:]  # (num_windows, horizon)
-
-    # Subsample: keep at most max_windows
-    if X.shape[0] > max_windows:
-        idx = torch.randperm(X.shape[0])[:max_windows]
-        X = X[idx]
-        y = y[idx]
-
-    return X, y
-
-
-# -------------------------------------------------
-# Build dataset using first N series
-# -------------------------------------------------
-N_SERIES = num_train_series
-STRIDE = 4
-MAX_WINDOWS = 1000000
-
-X_list = []
-y_list = []
-
-subset = dataset["train"].select(range(N_SERIES))
-
-for example in subset:
-    target = example["target"]
-    if isinstance(target, dict):
-        target = target["values"]
-    target = list(map(float, target))
-
-    Xv, yv = create_windows_vectorized(
-        target,
-        window_size=window_size,
-        horizon=horizon,
-        stride=STRIDE,
-        max_windows=MAX_WINDOWS,
-    )
-
-    if Xv is not None:
-        X_list.append(Xv)
-        y_list.append(yv)
-
-# Concatenate all windows from all series
-X = torch.cat(X_list, dim=0)
-y = torch.cat(y_list, dim=0)
-
-print("Final dataset shapes:", X.shape, y.shape)
-
-# -------------------------------------------------
-# Train/validation split
-# -------------------------------------------------
-train_size = int(0.8 * len(X))
-X_train, y_train = X[:train_size], y[:train_size]
-X_val, y_val = X[train_size:], y[train_size:]
-# -------------------------------------------------
-# Model setup
-# -------------------------------------------------
-model = TransformerTimeSeries(
-    input_dim=1,
-    model_dim=64,
-    num_heads=4,
-    num_layers=2,
-    output_dim=horizon,
-).to(device)
-
-criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
-
-# -------------------------------------------------
-# Mini-batch training loop
-# -------------------------------------------------
-epochs = 10
-batch_size = 16
-
-
-def batch_iter(X, y, batch_size):
-    for i in range(0, len(X), batch_size):
-        yield X[i : i + batch_size], y[i : i + batch_size]
-
-
-for epoch in range(epochs):
-    model.train()
-    total_loss = 0.0
-
-    for xb, yb in batch_iter(X_train, y_train, batch_size):
-        xb, yb = xb.to(device), yb.to(device)
-
-        optimizer.zero_grad()
-        out = model(xb)
-        loss = criterion(out, yb)
-        loss.backward()
-
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-
-        optimizer.step()
-        total_loss += loss.item() * len(xb)
-
-    avg_train_loss = total_loss / len(X_train)
-
-    # Validation
-    model.eval()
-    val_loss = 0.0
-    with torch.no_grad():
-        for xb, yb in batch_iter(X_val, y_val, batch_size):
-            xb, yb = xb.to(device), yb.to(device)
-            val_loss += criterion(model(xb), yb).item() * len(xb)
-    avg_val_loss = val_loss / len(X_val)
-
-    print(
-        f"Epoch {epoch+1} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}"
-    )
-
-    # 🔹 Clear GPU memory between epochs
-    if device.type == "mps":
-        torch.mps.empty_cache()
-
-
-# -------------------------------------------------
-# Example prediction
-# -------------------------------------------------
-def predict_future(model, initial_window, forecast_steps, window_size, horizon, device):
-    """
-    model: trained model
-    initial_window: tensor of shape (window_size, 1)
-    forecast_steps: how many total steps to predict
-    window_size: input window size (e.g., 24)
-    horizon: model's output size (e.g., 12)
+    model: trained TransformerTimeSeries
+    init_window_vals: numpy array of last 'lag' values
+    init_window_ts: corresponding datetime timestamps
+    steps: how many future steps to predict
     """
     model.eval()
     preds = []
+    window_vals = init_window_vals.copy()
 
-    # Current window to feed into the model
-    current = initial_window.clone().to(device)  # shape (window_size, 1)
+    for _ in range(steps):
+        # Prepare lag tensor
+        x_lag = (
+            torch.tensor(window_vals[-lag:], dtype=torch.float32)
+            .unsqueeze(0)
+            .unsqueeze(-1)
+        )  # (1, lag, 1)
 
-    steps_done = 0
+        # Prepare time features for the last lag
+        last_ts = init_window_ts[len(window_vals) - 1]
+        hour = torch.tensor([[last_ts.hour / 23.0]], dtype=torch.float32)
+        weekday = torch.tensor([[last_ts.weekday() / 6.0]], dtype=torch.float32)
+        tf = torch.cat([hour, weekday], dim=-1).unsqueeze(0)  # (1, 1, 2)
 
-    with torch.no_grad():
-        while steps_done < forecast_steps:
-            # Model expects shape (batch, seq_len, features)
-            inp = current.unsqueeze(0)  # (1, window_size, 1)
-            out = model(inp)  # (1, horizon)
+        # Model forward
+        with torch.no_grad():
+            pred = model(x_lag.to(device), time_features=tf.to(device))
+        pred_val = pred.item()
+        preds.append(pred_val)
 
-            # Clamp negatives
-            out = torch.clamp(out, min=0)
+        # Append to window for next step
+        window_vals = list(window_vals) + [pred_val]
 
-            # Convert to 1D tensor
-            out_vals = out[0]  # shape: (horizon,)
-
-            # Append to results
-            preds.extend(out_vals.cpu().tolist())
-
-            # Slide window forward by horizon steps
-            new_values = torch.cat([current[:, 0], out_vals])[-window_size:]
-            current = new_values.unsqueeze(-1)
-
-            steps_done += horizon
-
-    # Trim in case we went past forecast_steps
-    return preds[:forecast_steps]
+    return preds
 
 
-# ------------------------------------------------------------
-# Predict the next 20 time steps using autoregressive rollout
-# ------------------------------------------------------------
-initial_window = X_val[0].cpu()  # shape (window_size, 1)
-future_steps = 20
+def compute_time_features(ts_list):
+    hours = np.array([t.hour / 23.0 for t in ts_list], dtype=np.float32)
+    weekdays = np.array([t.weekday() / 6.0 for t in ts_list], dtype=np.float32)
+    return np.stack([hours, weekdays], axis=-1)  # (seq_len, 2)
 
-pred_long = predict_future(
-    model=model,
-    initial_window=initial_window,
-    forecast_steps=future_steps,
-    window_size=window_size,
-    horizon=horizon,
-    device=device,
+
+def build_windows(values, timestamps, seq_len):
+    """
+    Returns:
+      X: (num_windows, seq_len, 1)
+      y: (num_windows, 1)
+      TF: (num_windows, seq_len, 2)
+    """
+    time_features = compute_time_features(timestamps)
+
+    X_list = []
+    y_list = []
+    TF_list = []
+
+    for i in range(len(values) - seq_len - 1):
+        seq = values[i : i + seq_len]
+        nxt = values[i + seq_len]
+        ts_feats = time_features[i : i + seq_len]
+
+        X_list.append(seq)
+        y_list.append(nxt)
+        TF_list.append(ts_feats)
+
+    # Convert lists to numpy arrays FIRST (fast)
+    X = np.array(X_list, dtype=np.float32)[:, :, None]  # (N, seq_len, 1)
+    y = np.array(y_list, dtype=np.float32)[:, None]  # (N, 1)
+    TF = np.array(TF_list, dtype=np.float32)  # (N, seq_len, 2)
+
+    # THEN convert to torch tensors ONCE (no warning)
+    return (
+        torch.from_numpy(X),
+        torch.from_numpy(y),
+        torch.from_numpy(TF),
+    )
+
+
+def batches(X, y, TF, bs):
+    idx = torch.randperm(len(X))
+    for i in range(0, len(X), bs):
+        j = idx[i : i + bs]
+        yield X[j], y[j], TF[j]
+
+
+def train_model(
+    model,
+    X_train,
+    y_train,
+    TF_train,
+    X_val,
+    y_val,
+    TF_val,
+    optimizer,
+    criterion,
+    epochs=20,
+    batch_size=64,
+):
+
+    n_train = len(X_train)
+    n_val = len(X_val)
+
+    best_val = float("inf")
+
+    for epoch in range(1, epochs + 1):
+
+        # ==========================
+        # TRAIN
+        # ==========================
+        model.train()
+        perm = torch.randperm(n_train)
+
+        train_loss = 0
+        batches = 0
+
+        for i in range(0, n_train, batch_size):
+            idx = perm[i : i + batch_size]
+
+            xb = X_train[idx].to(device)
+            yb = y_train[idx].to(device)
+            tfb = TF_train[idx].to(device)
+
+            optimizer.zero_grad()
+            out = model(xb, time_features=tfb)
+            loss = criterion(out, yb)
+
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+
+            train_loss += loss.item()
+            batches += 1
+
+        avg_train = train_loss / batches
+
+        # ==========================
+        # VALIDATION
+        # ==========================
+        model.eval()
+        val_loss = 0
+        val_batches = 0
+
+        with torch.no_grad():
+            for i in range(0, n_val, batch_size):
+                xb = X_val[i : i + batch_size].to(device)
+                yb = y_val[i : i + batch_size].to(device)
+                tfb = TF_val[i : i + batch_size].to(device)
+
+                out = model(xb, time_features=tfb)
+                loss = criterion(out, yb)
+
+                val_loss += loss.item()
+                val_batches += 1
+
+        avg_val = val_loss / val_batches
+
+        # ==========================
+        # STATUS
+        # ==========================
+        print(f"Epoch {epoch:02d} | Train: {avg_train:.4f} | Val: {avg_val:.4f}")
+
+        if avg_val < best_val:
+            best_val = avg_val
+            torch.save(model.state_dict(), "best_model.pth")
+
+        if device.type == "mps":
+            torch.mps.empty_cache()
+
+
+def forecast_autoregressive(model, init_window_vals, init_window_ts, steps):
+    """
+    init_window_vals: (150,) last seq_len values
+    init_window_ts:   (150,) timestamps aligned to those values
+    steps: number of steps to forecast
+    """
+    model.eval()
+
+    seq_len = len(init_window_vals)
+
+    current_vals = init_window_vals.copy()
+    current_ts = init_ts.tolist()
+
+    predictions = []
+
+    for _ in range(steps):
+        # Build time features for the current full window
+        tf = compute_time_features(current_ts)
+        tf = torch.tensor(tf, dtype=torch.float32)[None, :, :]
+
+        x = torch.tensor(current_vals, dtype=torch.float32)[:, None]
+        x = x[None, :, :]
+
+        x = x.to(device)
+        tf = tf.to(device)
+
+        with torch.no_grad():
+            pred = model(x, tf).item()
+
+        predictions.append(pred)
+
+        # Slide window forward by 1
+        current_vals = np.append(current_vals[1:], pred)
+        current_ts = current_ts[1:] + [
+            current_ts[-1] + (current_ts[-1] - current_ts[-2])
+        ]
+
+    return predictions
+
+
+# -------------------------
+# Load datasets
+# -------------------------
+data_dir = "data/processed/nab/realTweets/realTweets"
+X_train_all, y_train_all, TF_train_all, val_sets = load_and_concat_datasets(data_dir)
+
+# -------------------------
+# Initialize model
+# -------------------------
+model = TransformerTimeSeries(
+    input_dim=12 + 2,  # 12 lags + 2 time features
+    model_dim=128,
+    num_heads=8,
+    num_layers=2,
+    dropout=0.1,
+).to(device)
+
+criterion = torch.nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+# -------------------------
+# Train the model
+# -------------------------
+train_model(
+    model,
+    X_train_all,
+    y_train_all,
+    TF_train_all,
+    X_train_all,
+    y_train_all,
+    TF_train_all,  # Using same as val just for now
+    optimizer,
+    criterion,
+    epochs=25,
+    batch_size=64,
 )
 
-# ------------------------------------------------------------
-# Extract TRUE future values for comparison
-# ------------------------------------------------------------
-# y_val holds true next-step targets per window.
-# For multi-step comparison, we need the raw time series from which X_val[0] came.
 
-# Recover the original target sequence for the corresponding validation window
-# X_val[k] corresponds to window starting at index: (train_size + k*stride)
-stride = STRIDE  # same stride used during window creation
-raw_series = None
+# -------------------------
+# Sample prediction display
+# -------------------------
+for X_val, y_val, TF_val, fname, _ in val_sets:
+    print("\n# -----------------------------------")
+    print(f"# Sample autoregressive prediction for {fname}")
+    print("# -----------------------------------")
 
-# Find which raw series X_val[0] belongs to
-idx = train_size  # first validation window index in the concatenated set
-window_global_index = idx
+    # Use the timestamps, not time features
+    init_vals = X_val[0].squeeze(-1).cpu().numpy()
+    init_ts = pd.to_datetime(val_sets[0][4][: len(init_vals)])  # <- correct
 
-# Determine which original series & offset this window came from
-cum = 0
-for example in subset:
-    target = example["target"]
-    if isinstance(target, dict):
-        target = target["values"]
-    target = list(map(float, target))
+    steps = 20
 
-    tlen = len(target)
-    num_windows = max(0, (tlen - (window_size + horizon)) // stride + 1)
+    preds = forecast_autoregressive(model, init_vals, init_ts, steps=steps)
 
-    if window_global_index < cum + num_windows:
-        # This is the series we want
-        series_start_index = (window_global_index - cum) * stride
-        raw_series = target
-        break
+    # True future values
+    true_vals = y_val[:steps].cpu().numpy().flatten().tolist()
 
-    cum += num_windows
+    print("\n=== SAMPLE PREDICTIONS (first 20 steps) ===")
+    print(f"{'Step':>4} | {'Prediction':>12} | {'Actual':>12}")
+    print("-" * 38)
 
-# Extract the correct next "future_steps" true values
-true_future = raw_series[
-    series_start_index + window_size : series_start_index + window_size + future_steps
-]
-
-# Pad if the true series ends before future_steps
-if len(true_future) < future_steps:
-    true_future += [None] * (future_steps - len(true_future))
-
-
-# ------------------------------------------------------------
-# Print predictions and correct values side-by-side
-# ------------------------------------------------------------
-print("\nLong forecast (next 20 steps):")
-print("Step | Prediction |   Actual")
-print("----------------------------------")
-
-for i, pred in enumerate(pred_long):
-    truth = true_future[i]
-    if truth is None:
-        print(f"t+{i+1:<2}: {pred:.4f} |   (no data)")
-    else:
-        print(f"t+{i+1:<2}: {pred:.4f} | {truth:.4f}")
-
-print("\nPred list:", pred_long)
-print("True list:", true_future)
+    for i in range(steps):
+        p = preds[i]
+        t = true_vals[i] if i < len(true_vals) else None
+        if t is None:
+            print(f"{i+1:>4} | {p:12.6f} | {'(no data)':>12}")
+        else:
+            print(f"{i+1:>4} | {p:12.6f} | {t:12.6f}")

@@ -47,6 +47,7 @@ def standard_scale(
     for col in cols_to_scale:
         mean = df[col].mean()
         std = df[col].std()
+        print("Mean, std ", mean, std)
         if std == 0 or pd.isna(std):
             # Konstante Spalte -> einfach auf 0 setzen
             df[col] = 0.0
