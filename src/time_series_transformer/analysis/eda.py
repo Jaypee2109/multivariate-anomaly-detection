@@ -106,9 +106,9 @@ def make_resampled_curves(
         title_suffix = freq_names.get(freq, freq)
         curve = hv.Curve(series, label=title_suffix).opts(
             opts.Curve(
-                title=f"{value_col} ({title_suffix})",
+                title=f"Demand ({title_suffix})",
                 xlabel="Date",
-                ylabel=value_col,
+                ylabel="Demand",
                 width=700,
                 height=300,
                 tools=["hover"],
@@ -193,9 +193,9 @@ def run_anomaly_eda_from_artifacts(
     # 2) Base curve of the value
     base_curve = hv.Curve(df[value_col], label="Value").opts(
         opts.Curve(
-            title=f"{value_col} with anomalies (test period)",
+            title=f"Demand with anomalies (test period)",
             xlabel="Time",
-            ylabel=value_col,
+            ylabel="Demand",
             width=900,
             height=350,
             tools=["hover"],

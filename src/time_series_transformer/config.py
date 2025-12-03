@@ -31,12 +31,23 @@ TRAIN_RATIO = 0.7
 RANDOM_STATE = 42
 
 # Rolling Z-score config
-ROLLING_WINDOW = 12  # number of points in rolling window
-ROLLING_Z_THRESH = 3.0
+ROLLING_WINDOW = 48  # number of points in rolling window
+ROLLING_Z_THRESH = 1.8
 
 # ARIMA config (p, d, q)
-ARIMA_ORDER = (2, 0, 2)
-ARIMA_Z_THRESH = 3.0
+ARIMA_ORDER = (2, 1, 2)
+ARIMA_Z_THRESH = 8.5
 
 # Isolation Forest config
-ISO_CONTAMINATION = 0.05  # expected proportion of anomalies
+ISO_CONTAMINATION = 0.004  # expected proportion of anomalies
+
+# LSTM baseline config
+LSTM_LOOKBACK = 72  # timesteps per window (~1 day)
+LSTM_HIDDEN_SIZE = 32
+LSTM_NUM_LAYERS = 1
+LSTM_DROPOUT = 0.0
+
+LSTM_EPOCHS = 20
+LSTM_BATCH_SIZE = 64
+LSTM_LR = 1e-3
+LSTM_ERROR_QUANTILE = 0.997  # top 1% of errors = anomalies
