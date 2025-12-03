@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>timeseries_anomalies</title>
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="https://cdn.holoviz.org/panel/1.8.3/dist/images/apple-touch-icon.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="https://cdn.holoviz.org/panel/1.8.3/dist/images/favicon.ico"
+    />
+    <link rel="apple-touch-icon" href="" />
+    <style>
+      html,
+      body {
+        display: flow-root;
+        box-sizing: border-box;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+    <script type="esms-options">
+      {"shimMode": true}
+    </script>
+
+    <script
+      type="text/javascript"
+      src="https://cdn.holoviz.org/panel/1.8.3/dist/bundled/reactiveesm/es-module-shims@^1.10.0/dist/es-module-shims.min.js"
+    ></script>
+    <script
+      type="text/javascript"
+      src="https://cdn.bokeh.org/bokeh/release/bokeh-3.8.1.min.js"
+    ></script>
+    <script
+      type="text/javascript"
+      src="https://cdn.bokeh.org/bokeh/release/bokeh-gl-3.8.1.min.js"
+    ></script>
+    <script
+      type="text/javascript"
+      src="https://cdn.bokeh.org/bokeh/release/bokeh-widgets-3.8.1.min.js"
+    ></script>
+    <script
+      type="text/javascript"
+      src="https://cdn.bokeh.org/bokeh/release/bokeh-tables-3.8.1.min.js"
+    ></script>
+    <script
+      type="text/javascript"
+      src="https://cdn.holoviz.org/panel/1.8.3/dist/panel.min.js"
+    ></script>
+
+    <script type="text/javascript">
+      Bokeh.set_log_level("info");
+    </script>
+  </head>
+  <body>
+    <div
+      id="f4e76d80-af20-4323-b1ee-441fe9cb64f3"
+      data-root-id="p1011"
+      style="display: contents"
+    ></div>
+
+    <script type="application/json" id="e2782c53-37cc-4c64-97a4-596c31235b37">
+      {
+        "669288bf-73c2-4f1a-88f5-729452ae1bc9": {
+          "version": "3.8.1",
+          "title": "Bokeh Application",
+          "config": {
+            "type": "object",
+            "name": "DocumentConfig",
+            "id": "p1009",
+            "attributes": {
+              "notifications": {
+                "type": "object",
+                "name": "Notifications",
+                "id": "p1010"
+              }
+            }
+          },
+          "roots": [
+            {
+              "type": "object",
+              "name": "Row",
+              "id": "p1011",
+              "attributes": {
+                "name": "Row00294",
+                "tags": ["embedded"],
+                "stylesheets": [
+                  "\n:host(.pn-loading):before, .pn-loading:before {\n  background-color: #c3c3c3;\n  mask-size: auto calc(min(50%, 300px));\n  -webkit-mask-size: auto calc(min(50%, 300px));\n}",
+                  {
+                    "type": "object",
+                    "name": "ImportedStyleSheet",
+                    "id": "p1014",
+                    "attributes": {
+                      "url": "https://cdn.holoviz.org/panel/1.8.3/dist/css/loading.css"
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "name": "ImportedStyleSheet",
+                    "id": "p1139",
+                    "attributes": {
+                      "url": "https://cdn.holoviz.org/panel/1.8.3/dist/css/listpanel.css"
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "name": "ImportedStyleSheet",
+                    "id": "p1012",
+                    "attributes": {
+                      "url": "https://cdn.holoviz.org/panel/1.8.3/dist/bundled/theme/default.css"
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "name": "ImportedStyleSheet",
+                    "id": "p1013",
+                    "attributes": {
+                      "url": "https://cdn.holoviz.org/panel/1.8.3/dist/bundled/theme/native.css"
+                    }
+                  }
+                ],
+                "min_width": 900,
+                "margin": 0,
+                "sizing_mode": "stretch_width",
+                "align": "start",
+                "children": [
+                  {
+                    "type": "object",
+                    "name": "Spacer",
+                    "id": "p1015",
+                    "attributes": {
+                      "name": "HSpacer00298",
+                      "stylesheets": [
+                        "\n:host(.pn-loading):before, .pn-loading:before {\n  background-color: #c3c3c3;\n  mask-size: auto calc(min(50%, 300px));\n  -webkit-mask-size: auto calc(min(50%, 300px));\n}",
+                        { "id": "p1014" },
+                        { "id": "p1012" },
+                        { "id": "p1013" }
+                      ],
+                      "min_width": 0,
+                      "margin": 0,
+                      "sizing_mode": "stretch_width",
+                      "align": "start"
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "name": "Figure",
+                    "id": "p1032",
+                    "attributes": {
+                      "width": 900,
+                      "height": 350,
+                      "margin": [5, 10],
+                      "sizing_mode": "fixed",
+                      "align": "start",
+                      "x_range": {
+                        "type": "object",
+                        "name": "Range1d",
+                        "id": "p1016",
+                        "attributes": {
+                          "name": "timestamp",
+                          "tags": [[["timestamp", null]], []],
+                          "start": 1428313673000.0,
+                          "end": 1429739273000.0,
+                          "reset_start": 1428313673000.0,
+                          "reset_end": 1429739273000.0
+                        }
+                      },
+                      "y_range": {
+                        "type": "object",
+                        "name": "Range1d",
+                        "id": "p1017",
+                        "attributes": {
+                          "name": "value",
+                          "tags": [
+                            [["value", null]],
+                            {
+                              "type": "map",
+                              "entries": [
+                                ["invert_yaxis", false],
+                                ["autorange", false]
+                              ]
+                            }
+                          ],
+                          "start": -14.8,
+                          "end": 162.8,
+                          "reset_start": -14.8,
+                          "reset_end": 162.8
+                        }
+                      },
+                      "x_scale": {
+                        "type": "object",
+                        "name": "LinearScale",
+                        "id": "p1042"
+                      },
+                      "y_scale": {
+                        "type": "object",
+                        "name": "LinearScale",
+                        "id": "p1043"
+                      },
+                      "title": {
+                        "type": "object",
+                        "name": "Title",
+                        "id": "p1035",
+                        "attributes": {
+                          "text": "value with anomalies (test period)",
+                          "text_color": "black",
+                          "text_font_size": "12pt"
+                        }
+                      },
+                      "renderers": [
+                        {
+                          "type": "object",
+                          "name": "GlyphRenderer",
+                          "id": "p1088",
+                          "attributes": {
+                            "name": "Value",
+                            "data_source": {
+                              "type": "object",
+                              "name": "ColumnDataSource",
+                              "id": "p1079",
+                              "attributes": {
+                                "selected": {
+                                  "type": "object",
+                                  "name": "Selection",
+                                  "id": "p1080",
+                                  "attributes": {
+                                    "indices": [],
+                                    "line_indices": []
+                                  }
+                                },
+                                "selection_policy": {
+                                  "type": "object",
+                                  "name": "UnionRenderers",
+                                  "id": "p1081"
+                                },
+                                "data": {
+                                  "type": "map",
+                                  "entries": [
+                                    [
+                                      "timestamp",
+                                      {
+                                        "type": "ndarray",
+                                        "array": {
+                                          "type": "bytes",
+                                          "data": "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"
+                                        },
+                                        "shape": [4753],
+                                        "dtype": "float64",
+                                        "order": "little"
+                                      }
+                                    ],
+                                    [
+                                      "value",
+                                      {
+                                        "type": "ndarray",
+                                        "array": {
+                                          "type": "bytes",
+                                          "data": "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"
+                                        },
+                                        "shape": [4753],
+                                        "dtype": "int32",
+                                        "order": "little"
+                                      }
+                                    ]
+                                  ]
+                                }
+                              }
+                            },
+                            "view": {
+                              "type": "object",
+                              "name": "CDSView",
+                              "id": "p1089",
+                              "attributes": {
+                                "filter": {
+                                  "type": "object",
+                                  "name": "AllIndices",
+                                  "id": "p1090"
+                                }
+                              }
+                            },
+                            "glyph": {
+                              "type": "object",
+                              "name": "Line",
+                              "id": "p1085",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "line_color": "#30a2da",
+                                "line_width": 2
+                              }
+                            },
+                            "selection_glyph": {
+                              "type": "object",
+                              "name": "Line",
+                              "id": "p1093",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "line_color": "#30a2da",
+                                "line_width": 2
+                              }
+                            },
+                            "nonselection_glyph": {
+                              "type": "object",
+                              "name": "Line",
+                              "id": "p1086",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "line_color": "#30a2da",
+                                "line_alpha": 0.1,
+                                "line_width": 2
+                              }
+                            },
+                            "muted_glyph": {
+                              "type": "object",
+                              "name": "Line",
+                              "id": "p1087",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "line_color": "#30a2da",
+                                "line_alpha": 0.1,
+                                "line_width": 2
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "name": "GlyphRenderer",
+                          "id": "p1103",
+                          "attributes": {
+                            "name": "Rolling Z-Score",
+                            "data_source": {
+                              "type": "object",
+                              "name": "ColumnDataSource",
+                              "id": "p1094",
+                              "attributes": {
+                                "selected": {
+                                  "type": "object",
+                                  "name": "Selection",
+                                  "id": "p1095",
+                                  "attributes": {
+                                    "indices": [],
+                                    "line_indices": []
+                                  }
+                                },
+                                "selection_policy": {
+                                  "type": "object",
+                                  "name": "UnionRenderers",
+                                  "id": "p1096"
+                                },
+                                "data": {
+                                  "type": "map",
+                                  "entries": [
+                                    [
+                                      "timestamp",
+                                      {
+                                        "type": "ndarray",
+                                        "array": {
+                                          "type": "bytes",
+                                          "data": "H4sIAAEAAAAC/2NoSFBTOFnixNAwTWALmN5z4M4pEL2gt/U0iGZZ5XAGRGsxZoJpoYIcML2t/upZED0rX+AciNZhEQfSAKGpuoRQAAAA"
+                                        },
+                                        "shape": [10],
+                                        "dtype": "float64",
+                                        "order": "little"
+                                      }
+                                    ],
+                                    [
+                                      "value",
+                                      {
+                                        "type": "ndarray",
+                                        "array": {
+                                          "type": "bytes",
+                                          "data": "H4sIAAEAAAAC/3NjYGCwAGJpIPYD4jAgbgHiJiAuB+JmIG4DYgArClhRKAAAAA=="
+                                        },
+                                        "shape": [10],
+                                        "dtype": "int32",
+                                        "order": "little"
+                                      }
+                                    ]
+                                  ]
+                                }
+                              }
+                            },
+                            "view": {
+                              "type": "object",
+                              "name": "CDSView",
+                              "id": "p1104",
+                              "attributes": {
+                                "filter": {
+                                  "type": "object",
+                                  "name": "AllIndices",
+                                  "id": "p1105"
+                                }
+                              }
+                            },
+                            "glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1100",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                }
+                              }
+                            },
+                            "selection_glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1107",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "angle": { "type": "value", "value": 0.0 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                },
+                                "line_alpha": { "type": "value", "value": 1.0 },
+                                "line_width": { "type": "value", "value": 1 },
+                                "line_join": {
+                                  "type": "value",
+                                  "value": "bevel"
+                                },
+                                "line_cap": {
+                                  "type": "value",
+                                  "value": "butt"
+                                },
+                                "line_dash": { "type": "value", "value": [] },
+                                "line_dash_offset": {
+                                  "type": "value",
+                                  "value": 0
+                                },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                },
+                                "fill_alpha": { "type": "value", "value": 1.0 },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                },
+                                "hatch_alpha": {
+                                  "type": "value",
+                                  "value": 1.0
+                                },
+                                "hatch_scale": {
+                                  "type": "value",
+                                  "value": 12.0
+                                },
+                                "hatch_pattern": {
+                                  "type": "value",
+                                  "value": null
+                                },
+                                "hatch_weight": {
+                                  "type": "value",
+                                  "value": 1.0
+                                },
+                                "marker": { "type": "value", "value": "circle" }
+                              }
+                            },
+                            "nonselection_glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1101",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                },
+                                "line_alpha": { "type": "value", "value": 0.1 },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                },
+                                "fill_alpha": { "type": "value", "value": 0.1 },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                },
+                                "hatch_alpha": { "type": "value", "value": 0.1 }
+                              }
+                            },
+                            "muted_glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1102",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                },
+                                "line_alpha": {
+                                  "type": "value",
+                                  "value": 0.05
+                                },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                },
+                                "fill_alpha": {
+                                  "type": "value",
+                                  "value": 0.05
+                                },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "red"
+                                },
+                                "hatch_alpha": {
+                                  "type": "value",
+                                  "value": 0.05
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "name": "GlyphRenderer",
+                          "id": "p1117",
+                          "attributes": {
+                            "name": "ARIMA Residual",
+                            "data_source": {
+                              "type": "object",
+                              "name": "ColumnDataSource",
+                              "id": "p1108",
+                              "attributes": {
+                                "selected": {
+                                  "type": "object",
+                                  "name": "Selection",
+                                  "id": "p1109",
+                                  "attributes": {
+                                    "indices": [],
+                                    "line_indices": []
+                                  }
+                                },
+                                "selection_policy": {
+                                  "type": "object",
+                                  "name": "UnionRenderers",
+                                  "id": "p1110"
+                                },
+                                "data": {
+                                  "type": "map",
+                                  "entries": [
+                                    [
+                                      "timestamp",
+                                      {
+                                        "type": "ndarray",
+                                        "array": {
+                                          "type": "bytes",
+                                          "data": "H4sIAAEAAAAC/yXFSyjDAQAH4NE8m9KSx7xfY5spF8ZpLQekYS1J0nJTYjGjhKVIjByEZh6pLSkOEg7zOEgbIweWJFEehVxIeST9f7/v8olsnlWRz6IT2b4/eetaMI7+CsX20TDckirB8h+++BeLTfI0PNRbhj0v5bixUI+3bzXHwp+KYrw4NoitW5NYb3bgEZ8Xl7p8eOCN7xcd4WX3CVYOBnDf2TUWr2j9wrp3rgxqxlJzC6786D8RXpIcYmOUF58t8JEeH97sv8AfXp7RcIlNLj7/xh1t0afCl9s8TxyHm9rj8Y04ASfpef00DyhkOKaDGzx8IiQRV9zxYWUSFu9wXWgytlXx3Rn+e8dLVCm428I3d/irKg27w9LxfF4Gvu7ksj1eF56Jp2r4uYNL73m1OguPW7l/j0dGZOMyAx+a5Qf3PDhfjrVdvG+feyJy8LeBa5zc+sA38nPxs1OBG40q7JzjV4/c/qTGltoCvL4g/A/vOHcs0AIAAA=="
+                                        },
+                                        "shape": [90],
+                                        "dtype": "float64",
+                                        "order": "little"
+                                      }
+                                    ],
+                                    [
+                                      "value",
+                                      {
+                                        "type": "ndarray",
+                                        "array": {
+                                          "type": "bytes",
+                                          "data": "H4sIAAEAAAAC/zXQyw7BUBCA4T5ai2pdStxJsJCQYGEjYSdBbGw9sH+Sv4svp5nLmTm9JElyRxsdHJGjQma86RnxKQoMzO+xRoqFucLa6Jujjzee6GFobowubtaPsEELLzzwwdVZubn4Lt23dF7c97NnibP52gQNezP3rZwfvTOsFO/44oKTdTvv3JpPnRvxg3vV/+rku+s9wx/uEWe1aAEAAA=="
+                                        },
+                                        "shape": [90],
+                                        "dtype": "int32",
+                                        "order": "little"
+                                      }
+                                    ]
+                                  ]
+                                }
+                              }
+                            },
+                            "view": {
+                              "type": "object",
+                              "name": "CDSView",
+                              "id": "p1118",
+                              "attributes": {
+                                "filter": {
+                                  "type": "object",
+                                  "name": "AllIndices",
+                                  "id": "p1119"
+                                }
+                              }
+                            },
+                            "glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1114",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                }
+                              }
+                            },
+                            "selection_glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1121",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "angle": { "type": "value", "value": 0.0 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                },
+                                "line_alpha": { "type": "value", "value": 1.0 },
+                                "line_width": { "type": "value", "value": 1 },
+                                "line_join": {
+                                  "type": "value",
+                                  "value": "bevel"
+                                },
+                                "line_cap": {
+                                  "type": "value",
+                                  "value": "butt"
+                                },
+                                "line_dash": { "type": "value", "value": [] },
+                                "line_dash_offset": {
+                                  "type": "value",
+                                  "value": 0
+                                },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                },
+                                "fill_alpha": { "type": "value", "value": 1.0 },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                },
+                                "hatch_alpha": {
+                                  "type": "value",
+                                  "value": 1.0
+                                },
+                                "hatch_scale": {
+                                  "type": "value",
+                                  "value": 12.0
+                                },
+                                "hatch_pattern": {
+                                  "type": "value",
+                                  "value": null
+                                },
+                                "hatch_weight": {
+                                  "type": "value",
+                                  "value": 1.0
+                                },
+                                "marker": { "type": "value", "value": "circle" }
+                              }
+                            },
+                            "nonselection_glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1115",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                },
+                                "line_alpha": { "type": "value", "value": 0.1 },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                },
+                                "fill_alpha": { "type": "value", "value": 0.1 },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                },
+                                "hatch_alpha": { "type": "value", "value": 0.1 }
+                              }
+                            },
+                            "muted_glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1116",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                },
+                                "line_alpha": {
+                                  "type": "value",
+                                  "value": 0.05
+                                },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                },
+                                "fill_alpha": {
+                                  "type": "value",
+                                  "value": 0.05
+                                },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "orange"
+                                },
+                                "hatch_alpha": {
+                                  "type": "value",
+                                  "value": 0.05
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "name": "GlyphRenderer",
+                          "id": "p1131",
+                          "attributes": {
+                            "name": "Isolation Forest",
+                            "data_source": {
+                              "type": "object",
+                              "name": "ColumnDataSource",
+                              "id": "p1122",
+                              "attributes": {
+                                "selected": {
+                                  "type": "object",
+                                  "name": "Selection",
+                                  "id": "p1123",
+                                  "attributes": {
+                                    "indices": [],
+                                    "line_indices": []
+                                  }
+                                },
+                                "selection_policy": {
+                                  "type": "object",
+                                  "name": "UnionRenderers",
+                                  "id": "p1124"
+                                },
+                                "data": {
+                                  "type": "map",
+                                  "entries": [
+                                    [
+                                      "timestamp",
+                                      {
+                                        "type": "ndarray",
+                                        "array": {
+                                          "type": "bytes",
+                                          "data": "H4sIAAEAAAAC/yXPbSwUABgH8MskTGZH3vKWJM6FWqOakPVBpkteqsns0lZrszLOS1KuQiWqDyY7r7NqZnVrdkO6ijLOdaTGUcm8JSGazIpbtfv/P/2+/J/n+T8CeVHYP40sQiBXPxH0GF1doeeVJtDmjxksub0BprpbQe81Wl+6EY7pqaLJGtb9tYdSbw9YdDkSdnZR9dwhmBwkgZrridCsl0alnIblNire78jUYv9MHhS7NED5WSUUGlTQcksz7DTQ8LstsL+sG+a2aeFTHx1sONwLu0Qf4PzEIJQqhmDNJA33H+H8b9u3RncP2MF0102wdWwPXPHdC3MHr8K60kI4qqdZLWVQkqaAWpNK5sSNsLhHAzXCHnjwIb22QNuDtfCvnIZo6YJWB8V2vbDhEZ1epDkFA1C5NAhFhXo4JR2CI4XD0PkdPeH4EVo6fYZX+keg2ukLVIWOwjNhY/xHOQlNG8N1RiN+UUPfAShadw4K01Kh7lYzlHm8gU3mM3Cl+ifzl9egdM4A2/tse4169TvAihtOcDRqP1TJomFQXAJMlV6C0cv5sN6qC7rV0qQZat/ZDeM3amB/LbX+Tosv9cCDx7UwfVYHm/MH4bKGpp3UQ1HwEPRMGobSh7RmgcYsfoKCU9PsEzrHnu9/QMUFmz6jw620+JkQhrTZwYU2eyg2dYAp6Y6w7jkdNXWCLhKaeJ/qfZ2hXQaNVdN76zfDPgm1qqBR4/SmyAV2ZVDTFzTCzBXKj9CXFdQwTvf5ucEcGW1+QZfN3OGuGKqcoPN+HvDRhi2wRuwJRzKp8yt6wnwrLD9KBxRUOEVjdnjBO1lU94paWmyDkbG0qJJ2TlETf28Ynk2vtFO1xXa4Gkv3VNGsr1Tl7wOXsmlgB30c5wtnq6jPND0TIIIPcmhyvB+sqqafpqljoBgeu0htEnZASQ0t+Ua1gf6wwCoAvk6ggloaOkPzdgbCtlwqO7YTNtUa/Q8SUzjBCAYAAA=="
+                                        },
+                                        "shape": [193],
+                                        "dtype": "float64",
+                                        "order": "little"
+                                      }
+                                    ],
+                                    [
+                                      "value",
+                                      {
+                                        "type": "ndarray",
+                                        "array": {
+                                          "type": "bytes",
+                                          "data": "H4sIAAEAAAAC/3WSy2oCQRBFx/zUjDPt4GTU+EwwxhdoFoEEogs3gu4EDdlkmw/2FpyGRsbFge6q6tu3qjuJomgnjqIjeuJbtMVINEQsElFQUwrH2upycNQ9VFALCGNVdbexN/GE9rOo4+WTtflb4bUp5tS7gJhYyj7Hu+Nchn5MfznaPjcTQ+I/4nzHa1UfEXvTGYgX7vHzsvteyfe519YHPHoPY7EWraCvhNxFnOivjs9fsSdfoNVi3eWtu9QmzKfE2z96C7Gl1jPhTEbtI5oF8x/Rh2lNxRLsXf74bxvqPtB/J9/Eh8W/8JvRV4M/54J3K9GasffvluInI+7n5GeT0rtxBYNNCBMEAwAA"
+                                        },
+                                        "shape": [193],
+                                        "dtype": "int32",
+                                        "order": "little"
+                                      }
+                                    ]
+                                  ]
+                                }
+                              }
+                            },
+                            "view": {
+                              "type": "object",
+                              "name": "CDSView",
+                              "id": "p1132",
+                              "attributes": {
+                                "filter": {
+                                  "type": "object",
+                                  "name": "AllIndices",
+                                  "id": "p1133"
+                                }
+                              }
+                            },
+                            "glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1128",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                }
+                              }
+                            },
+                            "selection_glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1135",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "angle": { "type": "value", "value": 0.0 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                },
+                                "line_alpha": { "type": "value", "value": 1.0 },
+                                "line_width": { "type": "value", "value": 1 },
+                                "line_join": {
+                                  "type": "value",
+                                  "value": "bevel"
+                                },
+                                "line_cap": {
+                                  "type": "value",
+                                  "value": "butt"
+                                },
+                                "line_dash": { "type": "value", "value": [] },
+                                "line_dash_offset": {
+                                  "type": "value",
+                                  "value": 0
+                                },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                },
+                                "fill_alpha": { "type": "value", "value": 1.0 },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                },
+                                "hatch_alpha": {
+                                  "type": "value",
+                                  "value": 1.0
+                                },
+                                "hatch_scale": {
+                                  "type": "value",
+                                  "value": 12.0
+                                },
+                                "hatch_pattern": {
+                                  "type": "value",
+                                  "value": null
+                                },
+                                "hatch_weight": {
+                                  "type": "value",
+                                  "value": 1.0
+                                },
+                                "marker": { "type": "value", "value": "circle" }
+                              }
+                            },
+                            "nonselection_glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1129",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                },
+                                "line_alpha": { "type": "value", "value": 0.1 },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                },
+                                "fill_alpha": { "type": "value", "value": 0.1 },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                },
+                                "hatch_alpha": { "type": "value", "value": 0.1 }
+                              }
+                            },
+                            "muted_glyph": {
+                              "type": "object",
+                              "name": "Scatter",
+                              "id": "p1130",
+                              "attributes": {
+                                "tags": ["apply_ranges"],
+                                "x": { "type": "field", "field": "timestamp" },
+                                "y": { "type": "field", "field": "value" },
+                                "size": { "type": "value", "value": 7 },
+                                "line_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                },
+                                "line_alpha": {
+                                  "type": "value",
+                                  "value": 0.05
+                                },
+                                "fill_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                },
+                                "fill_alpha": {
+                                  "type": "value",
+                                  "value": 0.05
+                                },
+                                "hatch_color": {
+                                  "type": "value",
+                                  "value": "purple"
+                                },
+                                "hatch_alpha": {
+                                  "type": "value",
+                                  "value": 0.05
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "toolbar": {
+                        "type": "object",
+                        "name": "Toolbar",
+                        "id": "p1041",
+                        "attributes": {
+                          "tools": [
+                            {
+                              "type": "object",
+                              "name": "WheelZoomTool",
+                              "id": "p1021",
+                              "attributes": {
+                                "tags": ["hv_created"],
+                                "renderers": "auto",
+                                "zoom_together": "none"
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "name": "HoverTool",
+                              "id": "p1022",
+                              "attributes": {
+                                "tags": ["hv_created"],
+                                "renderers": [
+                                  { "id": "p1088" },
+                                  { "id": "p1103" },
+                                  { "id": "p1117" },
+                                  { "id": "p1131" }
+                                ],
+                                "tooltips": [
+                                  ["timestamp", "@{timestamp}{%F %T}"],
+                                  ["value", "@{value}"]
+                                ],
+                                "formatters": {
+                                  "type": "map",
+                                  "entries": [["@{timestamp}", "datetime"]]
+                                },
+                                "sort_by": null
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "name": "SaveTool",
+                              "id": "p1068"
+                            },
+                            {
+                              "type": "object",
+                              "name": "PanTool",
+                              "id": "p1069"
+                            },
+                            {
+                              "type": "object",
+                              "name": "BoxZoomTool",
+                              "id": "p1070",
+                              "attributes": {
+                                "overlay": {
+                                  "type": "object",
+                                  "name": "BoxAnnotation",
+                                  "id": "p1071",
+                                  "attributes": {
+                                    "syncable": false,
+                                    "line_color": "black",
+                                    "line_alpha": 1.0,
+                                    "line_width": 2,
+                                    "line_dash": [4, 4],
+                                    "fill_color": "lightgrey",
+                                    "fill_alpha": 0.5,
+                                    "level": "overlay",
+                                    "visible": false,
+                                    "left": {
+                                      "type": "number",
+                                      "value": "nan"
+                                    },
+                                    "right": {
+                                      "type": "number",
+                                      "value": "nan"
+                                    },
+                                    "top": { "type": "number", "value": "nan" },
+                                    "bottom": {
+                                      "type": "number",
+                                      "value": "nan"
+                                    },
+                                    "left_units": "canvas",
+                                    "right_units": "canvas",
+                                    "top_units": "canvas",
+                                    "bottom_units": "canvas",
+                                    "handles": {
+                                      "type": "object",
+                                      "name": "BoxInteractionHandles",
+                                      "id": "p1077",
+                                      "attributes": {
+                                        "all": {
+                                          "type": "object",
+                                          "name": "AreaVisuals",
+                                          "id": "p1076",
+                                          "attributes": {
+                                            "fill_color": "white",
+                                            "hover_fill_color": "lightgray"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "name": "ResetTool",
+                              "id": "p1078"
+                            }
+                          ],
+                          "active_drag": { "id": "p1069" },
+                          "active_scroll": { "id": "p1021" }
+                        }
+                      },
+                      "left": [
+                        {
+                          "type": "object",
+                          "name": "LinearAxis",
+                          "id": "p1063",
+                          "attributes": {
+                            "ticker": {
+                              "type": "object",
+                              "name": "BasicTicker",
+                              "id": "p1064",
+                              "attributes": { "mantissas": [1, 2, 5] }
+                            },
+                            "formatter": {
+                              "type": "object",
+                              "name": "BasicTickFormatter",
+                              "id": "p1065"
+                            },
+                            "axis_label": "value",
+                            "major_label_policy": {
+                              "type": "object",
+                              "name": "AllLabels",
+                              "id": "p1066"
+                            }
+                          }
+                        }
+                      ],
+                      "below": [
+                        {
+                          "type": "object",
+                          "name": "DatetimeAxis",
+                          "id": "p1044",
+                          "attributes": {
+                            "ticker": {
+                              "type": "object",
+                              "name": "DatetimeTicker",
+                              "id": "p1045",
+                              "attributes": {
+                                "num_minor_ticks": 5,
+                                "tickers": [
+                                  {
+                                    "type": "object",
+                                    "name": "AdaptiveTicker",
+                                    "id": "p1046",
+                                    "attributes": {
+                                      "num_minor_ticks": 0,
+                                      "mantissas": [1, 2, 5],
+                                      "max_interval": 500.0
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "name": "AdaptiveTicker",
+                                    "id": "p1047",
+                                    "attributes": {
+                                      "num_minor_ticks": 0,
+                                      "base": 60,
+                                      "mantissas": [1, 2, 5, 10, 15, 20, 30],
+                                      "min_interval": 1000.0,
+                                      "max_interval": 1800000.0
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "name": "AdaptiveTicker",
+                                    "id": "p1048",
+                                    "attributes": {
+                                      "num_minor_ticks": 0,
+                                      "base": 24,
+                                      "mantissas": [1, 2, 4, 6, 8, 12],
+                                      "min_interval": 3600000.0,
+                                      "max_interval": 43200000.0
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "name": "DaysTicker",
+                                    "id": "p1049",
+                                    "attributes": {
+                                      "days": [
+                                        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+                                        13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+                                        23, 24, 25, 26, 27, 28, 29, 30, 31
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "name": "DaysTicker",
+                                    "id": "p1050",
+                                    "attributes": {
+                                      "days": [
+                                        1, 4, 7, 10, 13, 16, 19, 22, 25, 28
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "name": "DaysTicker",
+                                    "id": "p1051",
+                                    "attributes": { "days": [1, 8, 15, 22] }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "name": "DaysTicker",
+                                    "id": "p1052",
+                                    "attributes": { "days": [1, 15] }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "name": "MonthsTicker",
+                                    "id": "p1053",
+                                    "attributes": {
+                                      "months": [
+                                        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "name": "MonthsTicker",
+                                    "id": "p1054",
+                                    "attributes": {
+                                      "months": [0, 2, 4, 6, 8, 10]
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "name": "MonthsTicker",
+                                    "id": "p1055",
+                                    "attributes": { "months": [0, 4, 8] }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "name": "MonthsTicker",
+                                    "id": "p1056",
+                                    "attributes": { "months": [0, 6] }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "name": "YearsTicker",
+                                    "id": "p1057"
+                                  }
+                                ]
+                              }
+                            },
+                            "formatter": {
+                              "type": "object",
+                              "name": "DatetimeTickFormatter",
+                              "id": "p1060",
+                              "attributes": {
+                                "seconds": "%T",
+                                "minsec": "%T",
+                                "minutes": "%H:%M",
+                                "hours": "%H:%M",
+                                "days": "%b %d",
+                                "months": "%b %Y",
+                                "strip_leading_zeros": [
+                                  "microseconds",
+                                  "milliseconds",
+                                  "seconds"
+                                ],
+                                "boundary_scaling": false,
+                                "context": {
+                                  "type": "object",
+                                  "name": "DatetimeTickFormatter",
+                                  "id": "p1059",
+                                  "attributes": {
+                                    "microseconds": "%T",
+                                    "milliseconds": "%T",
+                                    "seconds": "%b %d, %Y",
+                                    "minsec": "%b %d, %Y",
+                                    "minutes": "%b %d, %Y",
+                                    "hourmin": "%b %d, %Y",
+                                    "hours": "%b %d, %Y",
+                                    "days": "%Y",
+                                    "months": "",
+                                    "years": "",
+                                    "boundary_scaling": false,
+                                    "hide_repeats": true,
+                                    "context": {
+                                      "type": "object",
+                                      "name": "DatetimeTickFormatter",
+                                      "id": "p1058",
+                                      "attributes": {
+                                        "microseconds": "%b %d, %Y",
+                                        "milliseconds": "%b %d, %Y",
+                                        "seconds": "",
+                                        "minsec": "",
+                                        "minutes": "",
+                                        "hourmin": "",
+                                        "hours": "",
+                                        "days": "",
+                                        "months": "",
+                                        "years": "",
+                                        "boundary_scaling": false,
+                                        "hide_repeats": true
+                                      }
+                                    },
+                                    "context_which": "all"
+                                  }
+                                },
+                                "context_which": "all"
+                              }
+                            },
+                            "axis_label": "Time",
+                            "major_label_policy": {
+                              "type": "object",
+                              "name": "AllLabels",
+                              "id": "p1061"
+                            }
+                          }
+                        }
+                      ],
+                      "center": [
+                        {
+                          "type": "object",
+                          "name": "Grid",
+                          "id": "p1062",
+                          "attributes": {
+                            "axis": { "id": "p1044" },
+                            "ticker": { "id": "p1045" }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "name": "Grid",
+                          "id": "p1067",
+                          "attributes": {
+                            "dimension": 1,
+                            "axis": { "id": "p1063" },
+                            "ticker": { "id": "p1064" }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "name": "Legend",
+                          "id": "p1091",
+                          "attributes": {
+                            "location": "top_left",
+                            "click_policy": "hide",
+                            "items": [
+                              {
+                                "type": "object",
+                                "name": "LegendItem",
+                                "id": "p1092",
+                                "attributes": {
+                                  "label": {
+                                    "type": "value",
+                                    "value": "Value"
+                                  },
+                                  "renderers": [{ "id": "p1088" }]
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "name": "LegendItem",
+                                "id": "p1106",
+                                "attributes": {
+                                  "label": {
+                                    "type": "value",
+                                    "value": "Rolling Z-Score"
+                                  },
+                                  "renderers": [{ "id": "p1103" }]
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "name": "LegendItem",
+                                "id": "p1120",
+                                "attributes": {
+                                  "label": {
+                                    "type": "value",
+                                    "value": "ARIMA Residual"
+                                  },
+                                  "renderers": [{ "id": "p1117" }]
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "name": "LegendItem",
+                                "id": "p1134",
+                                "attributes": {
+                                  "label": {
+                                    "type": "value",
+                                    "value": "Isolation Forest"
+                                  },
+                                  "renderers": [{ "id": "p1131" }]
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ],
+                      "min_border_top": 10,
+                      "min_border_bottom": 10,
+                      "min_border_left": 10,
+                      "min_border_right": 10,
+                      "output_backend": "webgl"
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "name": "Spacer",
+                    "id": "p1137",
+                    "attributes": {
+                      "name": "HSpacer00299",
+                      "stylesheets": [
+                        "\n:host(.pn-loading):before, .pn-loading:before {\n  background-color: #c3c3c3;\n  mask-size: auto calc(min(50%, 300px));\n  -webkit-mask-size: auto calc(min(50%, 300px));\n}",
+                        { "id": "p1014" },
+                        { "id": "p1012" },
+                        { "id": "p1013" }
+                      ],
+                      "min_width": 0,
+                      "margin": 0,
+                      "sizing_mode": "stretch_width",
+                      "align": "start"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "defs": [
+            { "type": "model", "name": "ReactiveHTML1" },
+            {
+              "type": "model",
+              "name": "FlexBox1",
+              "properties": [
+                {
+                  "name": "align_content",
+                  "kind": "Any",
+                  "default": "flex-start"
+                },
+                {
+                  "name": "align_items",
+                  "kind": "Any",
+                  "default": "flex-start"
+                },
+                { "name": "flex_direction", "kind": "Any", "default": "row" },
+                { "name": "flex_wrap", "kind": "Any", "default": "wrap" },
+                { "name": "gap", "kind": "Any", "default": "" },
+                {
+                  "name": "justify_content",
+                  "kind": "Any",
+                  "default": "flex-start"
+                }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "FloatPanel1",
+              "properties": [
+                {
+                  "name": "config",
+                  "kind": "Any",
+                  "default": { "type": "map" }
+                },
+                { "name": "contained", "kind": "Any", "default": true },
+                { "name": "position", "kind": "Any", "default": "right-top" },
+                { "name": "offsetx", "kind": "Any", "default": null },
+                { "name": "offsety", "kind": "Any", "default": null },
+                { "name": "theme", "kind": "Any", "default": "primary" },
+                { "name": "status", "kind": "Any", "default": "normalized" }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "GridStack1",
+              "properties": [
+                { "name": "ncols", "kind": "Any", "default": null },
+                { "name": "nrows", "kind": "Any", "default": null },
+                { "name": "allow_resize", "kind": "Any", "default": true },
+                { "name": "allow_drag", "kind": "Any", "default": true },
+                { "name": "state", "kind": "Any", "default": [] }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "drag1",
+              "properties": [
+                { "name": "slider_width", "kind": "Any", "default": 5 },
+                { "name": "slider_color", "kind": "Any", "default": "black" },
+                { "name": "start", "kind": "Any", "default": 0 },
+                { "name": "end", "kind": "Any", "default": 100 },
+                { "name": "value", "kind": "Any", "default": 50 }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "click1",
+              "properties": [
+                { "name": "terminal_output", "kind": "Any", "default": "" },
+                { "name": "debug_name", "kind": "Any", "default": "" },
+                { "name": "clears", "kind": "Any", "default": 0 }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "ReactiveESM1",
+              "properties": [
+                {
+                  "name": "esm_constants",
+                  "kind": "Any",
+                  "default": { "type": "map" }
+                }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "JSComponent1",
+              "properties": [
+                {
+                  "name": "esm_constants",
+                  "kind": "Any",
+                  "default": { "type": "map" }
+                }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "ReactComponent1",
+              "properties": [
+                { "name": "use_shadow_dom", "kind": "Any", "default": true },
+                {
+                  "name": "esm_constants",
+                  "kind": "Any",
+                  "default": { "type": "map" }
+                }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "AnyWidgetComponent1",
+              "properties": [
+                { "name": "use_shadow_dom", "kind": "Any", "default": true },
+                {
+                  "name": "esm_constants",
+                  "kind": "Any",
+                  "default": { "type": "map" }
+                }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "FastWrapper1",
+              "properties": [
+                { "name": "object", "kind": "Any", "default": null },
+                { "name": "style", "kind": "Any", "default": null }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "NotificationArea1",
+              "properties": [
+                {
+                  "name": "js_events",
+                  "kind": "Any",
+                  "default": { "type": "map" }
+                },
+                { "name": "max_notifications", "kind": "Any", "default": 5 },
+                { "name": "notifications", "kind": "Any", "default": [] },
+                {
+                  "name": "position",
+                  "kind": "Any",
+                  "default": "bottom-right"
+                },
+                { "name": "_clear", "kind": "Any", "default": 0 },
+                {
+                  "name": "types",
+                  "kind": "Any",
+                  "default": [
+                    {
+                      "type": "map",
+                      "entries": [
+                        ["type", "warning"],
+                        ["background", "#ffc107"],
+                        [
+                          "icon",
+                          {
+                            "type": "map",
+                            "entries": [
+                              ["className", "fas fa-exclamation-triangle"],
+                              ["tagName", "i"],
+                              ["color", "white"]
+                            ]
+                          }
+                        ]
+                      ]
+                    },
+                    {
+                      "type": "map",
+                      "entries": [
+                        ["type", "info"],
+                        ["background", "#007bff"],
+                        [
+                          "icon",
+                          {
+                            "type": "map",
+                            "entries": [
+                              ["className", "fas fa-info-circle"],
+                              ["tagName", "i"],
+                              ["color", "white"]
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "Notification",
+              "properties": [
+                { "name": "background", "kind": "Any", "default": null },
+                { "name": "duration", "kind": "Any", "default": 3000 },
+                { "name": "icon", "kind": "Any", "default": null },
+                { "name": "message", "kind": "Any", "default": "" },
+                { "name": "notification_type", "kind": "Any", "default": null },
+                { "name": "_rendered", "kind": "Any", "default": false },
+                { "name": "_destroyed", "kind": "Any", "default": false }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "TemplateActions1",
+              "properties": [
+                { "name": "open_modal", "kind": "Any", "default": 0 },
+                { "name": "close_modal", "kind": "Any", "default": 0 }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "BootstrapTemplateActions1",
+              "properties": [
+                { "name": "open_modal", "kind": "Any", "default": 0 },
+                { "name": "close_modal", "kind": "Any", "default": 0 }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "TemplateEditor1",
+              "properties": [{ "name": "layout", "kind": "Any", "default": [] }]
+            },
+            {
+              "type": "model",
+              "name": "MaterialTemplateActions1",
+              "properties": [
+                { "name": "open_modal", "kind": "Any", "default": 0 },
+                { "name": "close_modal", "kind": "Any", "default": 0 }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "request_value1",
+              "properties": [
+                { "name": "fill", "kind": "Any", "default": "none" },
+                { "name": "_synced", "kind": "Any", "default": null },
+                { "name": "_request_sync", "kind": "Any", "default": 0 }
+              ]
+            },
+            {
+              "type": "model",
+              "name": "holoviews.plotting.bokeh.raster.HoverModel",
+              "properties": [
+                { "name": "xy", "kind": "Any", "default": null },
+                { "name": "data", "kind": "Any", "default": null }
+              ]
+            }
+          ]
+        }
+      }
+    </script>
+    <script type="text/javascript">
+      (function () {
+        const fn = function () {
+          Bokeh.safely(function () {
+            (function (root) {
+              function embed_document(root) {
+                const docs_json = document.getElementById(
+                  "e2782c53-37cc-4c64-97a4-596c31235b37"
+                ).textContent;
+                const render_items = [
+                  {
+                    docid: "669288bf-73c2-4f1a-88f5-729452ae1bc9",
+                    roots: { p1011: "f4e76d80-af20-4323-b1ee-441fe9cb64f3" },
+                    root_ids: ["p1011"],
+                  },
+                ];
+                root.Bokeh.embed.embed_items(docs_json, render_items);
+              }
+              if (root.Bokeh !== undefined) {
+                embed_document(root);
+              } else {
+                let attempts = 0;
+                const timer = setInterval(
+                  function (root) {
+                    if (root.Bokeh !== undefined) {
+                      clearInterval(timer);
+                      embed_document(root);
+                    } else {
+                      attempts++;
+                      if (attempts > 100) {
+                        clearInterval(timer);
+                        console.log(
+                          "Bokeh: ERROR: Unable to run BokehJS code because BokehJS library is missing"
+                        );
+                      }
+                    }
+                  },
+                  10,
+                  root
+                );
+              }
+            })(window);
+          });
+        };
+        if (document.readyState != "loading") fn();
+        else document.addEventListener("DOMContentLoaded", fn, { once: true });
+      })();
+    </script>
+  </body>
+</html>

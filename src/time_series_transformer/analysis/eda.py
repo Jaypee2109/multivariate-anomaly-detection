@@ -1,22 +1,24 @@
-# src/time_series_transformer/analysis/eda_timeseries.py
-
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Optional, Tuple
-from time_series_transformer.data_pipeline.preprocessing import load_csv_to_df
+from typing import Iterable, Optional, Tuple, Dict
 
 import pandas as pd
 import holoviews as hv
 from holoviews import opts
 
-# Für VS Code mit Jupyter / Interactive Window:
-# - Wenn du dieses Skript als Notebook/interactive ausführst, werden Plots angezeigt.
+from time_series_transformer.data_pipeline.preprocessing import load_csv_to_df
+from time_series_transformer.utils.anomaly_io import load_anomaly_flags_from_artifacts
+
 hv.extension("bokeh")
 
 
-def basic_overview(df: pd.DataFrame) -> None:
+# ----------------------------------------------------------------------
+# Basic utilities
+# ----------------------------------------------------------------------
 
+
+def basic_overview(df: pd.DataFrame) -> None:
     print("=== HEAD ===")
     print(df.head())
 
@@ -68,13 +70,20 @@ def _infer_value_column(df: pd.DataFrame, value_col: Optional[str]) -> str:
     return inferred
 
 
+# ----------------------------------------------------------------------
+# Resampled curves (basic EDA)
+# ----------------------------------------------------------------------
+
+
 def make_resampled_curves(
     df: pd.DataFrame,
     timestamp_col: str = "timestamp",
     value_col: Optional[str] = None,
     freqs: Iterable[str] = ("h", "d", "W"),
 ) -> hv.Layout:
-
+    """
+    Create hourly/daily/weekly (etc.) resampled curves as a Layout.
+    """
     if timestamp_col not in df.columns:
         raise KeyError(
             f"Timestamp column '{timestamp_col}' not found in columns: {df.columns.tolist()}"
@@ -95,7 +104,7 @@ def make_resampled_curves(
         series = ts_df[value_col].resample(freq).mean()
 
         title_suffix = freq_names.get(freq, freq)
-        curve = hv.Curve(series).opts(
+        curve = hv.Curve(series, label=title_suffix).opts(
             opts.Curve(
                 title=f"{value_col} ({title_suffix})",
                 xlabel="Date",
@@ -115,14 +124,25 @@ def make_resampled_curves(
     return layout
 
 
-def run_eda_pipeline(
+# ----------------------------------------------------------------------
+# High-level EDA entrypoints (two separate methods)
+# ----------------------------------------------------------------------
+
+
+def run_basic_eda_from_csv(
     csv_path: str | Path,
     timestamp_col: str = "timestamp",
     value_col: Optional[str] = None,
     freqs: Iterable[str] = ("h", "d", "W"),
     save_html: bool = True,
-) -> None:
-
+) -> Tuple[pd.DataFrame, hv.Layout]:
+    """
+    Basic EDA:
+    - load CSV
+    - print head/describe/missing
+    - print time range
+    - create resampled curves (hourly/daily/weekly)
+    """
     df = load_csv_to_df(csv_path, parse_dates=[timestamp_col])
 
     basic_overview(df)
@@ -137,9 +157,109 @@ def run_eda_pipeline(
 
     if save_html:
         csv_path = Path(csv_path)
-        save_path = Path("reports") / f"{csv_path.stem}.html"
+        save_path = Path("reports") / f"{csv_path.stem}_basic_eda.html"
         save_path.parent.mkdir(parents=True, exist_ok=True)
         hv.save(layout, save_path, fmt="html")
-        print(f"\n[EDA] Saved HTML visualization to: {save_path}")
+        print(f"\n[EDA] Saved basic EDA HTML visualization to: {save_path}")
 
     return df, layout
+
+
+def run_anomaly_eda_from_artifacts(
+    artifacts_path: str | Path,
+    timestamp_col: str = "timestamp",
+    value_col: str = "value",
+    save_html: bool = True,
+    html_name: str = "timeseries_anomalies.html",
+):
+    """
+    Simple anomaly EDA that uses only the artifacts CSV.
+
+    Expects columns like:
+        timestamp, value,
+        <detector>_score, <detector>_is_anomaly
+
+    Example:
+        Rolling Z-Score_is_anomaly
+        ARIMA Residual_is_anomaly
+        Isolation Forest_is_anomaly
+    """
+    artifacts_path = Path(artifacts_path)
+
+    # 1) Load artifacts
+    df = pd.read_csv(artifacts_path, parse_dates=[timestamp_col])
+    df = df.set_index(timestamp_col).sort_index()
+
+    # 2) Base curve of the value
+    base_curve = hv.Curve(df[value_col], label="Value").opts(
+        opts.Curve(
+            title=f"{value_col} with anomalies (test period)",
+            xlabel="Time",
+            ylabel=value_col,
+            width=900,
+            height=350,
+            tools=["hover"],
+            show_grid=True,
+            muted_alpha=0.1,
+        )
+    )
+
+    overlays = [base_curve]
+
+    # 3) Find all *_is_anomaly columns
+    suffix = "_is_anomaly"
+    anomaly_cols = [c for c in df.columns if c.endswith(suffix)]
+
+    detector_colors = [
+        "red",
+        "orange",
+        "purple",
+        "green",
+        "blue",
+    ]
+
+    for i, col in enumerate(anomaly_cols):
+        detector_name = col[: -len(suffix)]  # strip "_is_anomaly"
+        mask = df[col].astype(bool)
+
+        if not mask.any():
+            continue  # skip detectors that found no anomalies
+
+        anom_df = df.loc[mask, [value_col]]
+
+        xs = anom_df.index
+        ys = anom_df[value_col]
+
+        color = detector_colors[i % len(detector_colors)]
+
+        points = hv.Scatter(
+            (xs, ys),
+            kdims=[timestamp_col],
+            vdims=[value_col],
+            label=detector_name,
+        ).opts(
+            opts.Scatter(
+                size=7,
+                marker="circle",
+                color=color,
+                tools=["hover"],
+                muted_alpha=0.05,
+            )
+        )
+
+        overlays.append(points)
+
+    overlay = hv.Overlay(overlays).opts(
+        opts.Overlay(
+            legend_position="top_left",
+            legend_opts={"click_policy": "hide"},  # click legend to hide/show
+        )
+    )
+
+    if save_html:
+        save_path = Path("reports") / html_name
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        hv.save(overlay, save_path, fmt="html")
+        print(f"[EDA] Saved anomaly EDA HTML visualization to: {save_path}")
+
+    return overlay

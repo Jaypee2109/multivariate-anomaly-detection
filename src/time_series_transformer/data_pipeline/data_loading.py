@@ -56,6 +56,18 @@ def load_dataset(directory: Path, name: str) -> Dict[str, pd.DataFrame]:
     return data
 
 
+def load_timeseries(path: Path, value_col: str = "value") -> pd.Series:
+    """
+    Load a CSV time series with columns:
+        timestamp,value
+
+    Returns a pandas Series indexed by timestamp.
+    """
+    df = pd.read_csv(path, parse_dates=["timestamp"])
+    df = df.set_index("timestamp").sort_index()
+    return df[value_col]
+
+
 def load_all_datasets(dataset_names: list[str]) -> dict[str, Dict[str, pd.DataFrame]]:
 
     return {name: load_dataset(name) for name in dataset_names}

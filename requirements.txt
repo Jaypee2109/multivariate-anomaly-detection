@@ -8,3 +8,5 @@ huggingface_hub
 python-dotenv
 holoviews
 bokeh
+statsmodels
+scikit-learn
