@@ -1,19 +1,17 @@
-# model.py
 import torch
 import torch.nn as nn
 from positional_encoding import PositionalEncoding
+from time2vec import Time2Vec
 
 
 def generate_causal_mask(seq_len):
-    mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1).bool()
-    return mask
+    return torch.triu(torch.ones(seq_len, seq_len), diagonal=1).bool()
 
 
 class TransformerTimeSeries(nn.Module):
     def __init__(
         self,
-        input_dim,  # 3 → [value, hour, weekday]
-        tfy_dim=2,  # 2 → [hour_next, weekday_next]
+        t2v_dim=16,
         model_dim=128,
         num_heads=8,
         num_layers=4,
@@ -21,8 +19,15 @@ class TransformerTimeSeries(nn.Module):
     ):
         super().__init__()
 
-        # Project each input timestep (value + TFx) into model_dim
-        self.input_proj = nn.Linear(input_dim, model_dim)
+        # Time2Vec for TFx (per timestep)
+        self.tfx_t2v = Time2Vec(in_dim=2, out_dim=t2v_dim)
+
+        # Time2Vec for TFy (prediction timestamp)
+        self.tfy_t2v = Time2Vec(in_dim=2, out_dim=t2v_dim)
+
+        # Input to transformer: [value (1) + time2vec (t2v_dim)]
+        self.input_proj = nn.Linear(1 + t2v_dim, model_dim)
+
         self.pos_encoder = PositionalEncoding(model_dim)
 
         encoder_layer = nn.TransformerEncoderLayer(
@@ -37,10 +42,10 @@ class TransformerTimeSeries(nn.Module):
             encoder_layer, num_layers=num_layers
         )
 
-        # NEW: project TFy into model-dim
-        self.tfy_proj = nn.Linear(tfy_dim, model_dim)
+        # TFy projection
+        self.tfy_proj = nn.Linear(t2v_dim, model_dim)
 
-        # NEW: combine encoder last-state + tfy projection
+        # Decoder
         self.decoder = nn.Sequential(
             nn.Linear(model_dim * 2, model_dim),
             nn.ReLU(),
@@ -49,31 +54,32 @@ class TransformerTimeSeries(nn.Module):
 
     def forward(self, src, tfy):
         """
-        src : (B, lag, 3)   → values + TFx
-        tfy : (B, 2)        → TFy features for prediction timestamp
+        src: (B, seq_len, 3) → [value, hour_norm, weekday_norm]
+        tfy: (B, 2)          → [hour_norm_next, weekday_norm_next]
         """
         B, seq_len, _ = src.shape
 
-        # (B, lag, model_dim)
-        x = self.input_proj(src)
+        # Split
+        vals = src[..., :1]  # (B, seq_len, 1)
+        tfx_raw = src[..., 1:]  # (B, seq_len, 2)
+
+        # Time2Vec for each timestep
+        tfx_embed = self.tfx_t2v(tfx_raw)  # (B, seq_len, t2v_dim)
+
+        # Combine
+        x = torch.cat([vals, tfx_embed], dim=-1)
+
+        x = self.input_proj(x)
         x = self.pos_encoder(x)
 
-        # Causal mask for autoregressive behavior
         mask = generate_causal_mask(seq_len).to(src.device)
-
-        # Transformer encoder output
         x = self.transformer_encoder(x, mask=mask)
 
-        # Take last hidden state (context vector)
-        last = x[:, -1, :]  # (B, model_dim)
+        last = x[:, -1, :]
 
-        # Project TFy
-        tfy_proj = self.tfy_proj(tfy)  # (B, model_dim)
+        # TFy time2vec
+        tfy_embed = self.tfy_t2v(tfy)  # (B, t2v_dim)
+        tfy_proj = self.tfy_proj(tfy_embed)
 
-        # Concatenate context + TFy
-        combined = torch.cat([last, tfy_proj], dim=-1)  # (B, 2*model_dim)
-
-        # Predict next value
-        out = self.decoder(combined)  # (B, 1)
-
+        out = self.decoder(torch.cat([last, tfy_proj], dim=-1))
         return out

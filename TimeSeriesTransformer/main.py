@@ -205,7 +205,7 @@ def train_model(
     optimizer,
     scheduler,
     criterion,
-    epochs=20,
+    epochs=10,
     batch_size=64,
 ):
 
@@ -339,15 +339,14 @@ data_dir = "data/processed/nab/realTweets/realTweets"
     load_and_concat_datasets(data_dir, lag=lag)
 )
 
-MODEL_DIM = 256
+MODEL_DIM = 128
 NUM_HEADS = 16
 NUM_LAYERS = 8
-EPOCHS = 1
+EPOCHS = 5
 BATCH_SIZE = 64
 
 model = TransformerTimeSeries(
-    input_dim=3,
-    tfy_dim=2,
+    t2v_dim=16,
     model_dim=MODEL_DIM,
     num_heads=NUM_HEADS,
     num_layers=NUM_LAYERS,
@@ -367,7 +366,7 @@ scheduler = torch.optim.lr_scheduler.OneCycleLR(
 )
 
 # -------------------------
-# Train using REAL validation set
+# Train
 # -------------------------
 train_model(
     model,
