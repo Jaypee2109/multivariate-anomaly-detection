@@ -28,7 +28,9 @@ class TransformerTimeSeries(nn.Module):
         # Input to transformer: [value (1) + time2vec (t2v_dim)]
         self.input_proj = nn.Linear(1 + t2v_dim, model_dim)
 
-        self.pos_encoder = PositionalEncoding(model_dim)
+        self.cross_attention = nn.MultiheadAttention(
+            embed_dim=model_dim, num_heads=num_heads, batch_first=True
+        )
 
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=model_dim,
@@ -47,7 +49,7 @@ class TransformerTimeSeries(nn.Module):
 
         # Decoder
         self.decoder = nn.Sequential(
-            nn.Linear(model_dim * 2, model_dim),
+            nn.Linear(model_dim, model_dim),
             nn.ReLU(),
             nn.Linear(model_dim, 1),
         )
@@ -70,16 +72,20 @@ class TransformerTimeSeries(nn.Module):
         x = torch.cat([vals, tfx_embed], dim=-1)
 
         x = self.input_proj(x)
-        x = self.pos_encoder(x)
 
         mask = generate_causal_mask(seq_len).to(src.device)
         x = self.transformer_encoder(x, mask=mask)
 
-        last = x[:, -1, :]
-
-        # TFy time2vec
         tfy_embed = self.tfy_t2v(tfy)  # (B, t2v_dim)
-        tfy_proj = self.tfy_proj(tfy_embed)
 
-        out = self.decoder(torch.cat([last, tfy_proj], dim=-1))
+        tfy_proj = self.tfy_proj(tfy_embed)  # (B, model_dim)
+        tfy_proj = tfy_proj.unsqueeze(1)  # (B, 1, model_dim)
+
+        # Query = TFy, Key/Value = encoder output sequence
+        q = tfy_proj
+        k = v = x
+
+        attended, _ = self.cross_attention(q, k, v)  # (B, 1, model_dim)
+
+        out = self.decoder(attended.squeeze(1))
         return out

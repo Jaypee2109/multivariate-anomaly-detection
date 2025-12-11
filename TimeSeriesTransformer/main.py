@@ -24,48 +24,56 @@ def load_and_concat_datasets(data_dir, lag=12):
     X_val_list, y_val_list = [], []
     TFx_val_list, TFy_val_list = [], []
 
-    val_sets = []  # for autoregressive forecasts
+    X_test_list, y_test_list = [], []
+    TFx_test_list, TFy_test_list = [], []
+
+    val_sets = []
+    test_sets = []
 
     for file in glob.glob(f"{data_dir}/*.csv"):
+
         df = pd.read_csv(file, parse_dates=["timestamp"]).sort_values("timestamp")
+        n = len(df)
 
-        split = int(0.8 * len(df))
+        train_end = int(0.70 * n)
+        val_end = int(0.85 * n)
 
-        # -------------------------
-        # TRAIN
-        # -------------------------
+        # ------------- TRAIN -----------------
         Xtr, ytr, TFxtr, TFytr = build_windows(
-            df["value"].values[:split],
-            df["timestamp"].values[:split],
-            lag,
+            df["value"].values[:train_end], df["timestamp"].values[:train_end], lag
         )
-
         X_train_list.append(Xtr)
         y_train_list.append(ytr)
         TFx_train_list.append(TFxtr)
         TFy_train_list.append(TFytr)
 
-        # -------------------------
-        # VALIDATION
-        # -------------------------
+        # ------------- VALIDATION -------------
         Xv, yv, TFxv, TFyv = build_windows(
-            df["value"].values[split:],
-            df["timestamp"].values[split:],
+            df["value"].values[train_end:val_end],
+            df["timestamp"].values[train_end:val_end],
             lag,
         )
-
         X_val_list.append(Xv)
         y_val_list.append(yv)
         TFx_val_list.append(TFxv)
         TFy_val_list.append(TFyv)
 
-        # timestamps for autoregressive forecast
-        timestamps = df["timestamp"].values[split:]
-        val_sets.append((Xv, yv, TFxv, TFyv, file, timestamps))
+        timestamps_val = df["timestamp"].values[train_end:val_end]
+        val_sets.append((Xv, yv, TFxv, TFyv, file, timestamps_val))
 
-    # -------------------------
-    # CONCAT ALL TRAIN/VAL
-    # -------------------------
+        # ------------- TEST -------------------
+        Xte, yte, TFxte, TFyte = build_windows(
+            df["value"].values[val_end:], df["timestamp"].values[val_end:], lag
+        )
+        X_test_list.append(Xte)
+        y_test_list.append(yte)
+        TFx_test_list.append(TFxte)
+        TFy_test_list.append(TFyte)
+
+        timestamps_test = df["timestamp"].values[val_end:]
+        test_sets.append((Xte, yte, TFxte, TFyte, file, timestamps_test))
+
+    # ------------- CONCAT ALL --------------
     X_train = torch.cat(X_train_list)
     y_train = torch.cat(y_train_list)
     TFx_train = torch.cat(TFx_train_list)
@@ -76,6 +84,11 @@ def load_and_concat_datasets(data_dir, lag=12):
     TFx_val = torch.cat(TFx_val_list)
     TFy_val = torch.cat(TFy_val_list)
 
+    X_test = torch.cat(X_test_list)
+    y_test = torch.cat(y_test_list)
+    TFx_test = torch.cat(TFx_test_list)
+    TFy_test = torch.cat(TFy_test_list)
+
     return (
         X_train,
         y_train,
@@ -85,7 +98,12 @@ def load_and_concat_datasets(data_dir, lag=12):
         y_val,
         TFx_val,
         TFy_val,
+        X_test,
+        y_test,
+        TFx_test,
+        TFy_test,
         val_sets,
+        test_sets,
     )
 
 
@@ -329,15 +347,51 @@ def forecast_autoregressive(model, init_window_vals, init_window_ts, steps=20, l
     return preds
 
 
+def evaluate_test(model, X_test, y_test, TFx_test, TFy_test, batch_size=64):
+    model.eval()
+    n = len(X_test)
+    total_loss = 0
+    criterion = nn.MSELoss()
+
+    with torch.no_grad():
+        for i in range(0, n, batch_size):
+
+            xb = X_test[i : i + batch_size].to(device)
+            tfxb = TFx_test[i : i + batch_size].to(device)
+            tfyb = TFy_test[i : i + batch_size].to(device)
+            yb = y_test[i : i + batch_size].to(device)
+
+            inp = torch.cat([xb, tfxb], dim=-1)
+            out = model(inp, tfy=tfyb)
+
+            total_loss += criterion(out, yb).item()
+
+    return total_loss / max(1, n // batch_size)
+
+
 # -------------------------
 # Load datasets
 # -------------------------
 lag = 90
 data_dir = "data/processed/nab/realTweets/realTweets"
 
-(X_train, y_train, TFx_train, TFy_train, X_val, y_val, TFx_val, TFy_val, val_sets) = (
-    load_and_concat_datasets(data_dir, lag=lag)
-)
+(
+    X_train,
+    y_train,
+    TFx_train,
+    TFy_train,
+    X_val,
+    y_val,
+    TFx_val,
+    TFy_val,
+    X_test,
+    y_test,
+    TFx_test,
+    TFy_test,
+    val_sets,
+    test_sets,
+) = load_and_concat_datasets(data_dir, lag=lag)
+
 
 MODEL_DIM = 128
 NUM_HEADS = 16
@@ -385,21 +439,33 @@ train_model(
     batch_size=BATCH_SIZE,
 )
 
-for X_val_i, y_val_i, TFx_val_i, TFy_val_i, fname, timestamps in val_sets:
+# -------------------------
+# Load best model & evaluate on TEST set
+# -------------------------
+# model.load_state_dict(torch.load("best_model.pth"))
+# test_loss = evaluate_test(
+#     model, X_test, y_test, TFx_test, TFy_test, batch_size=BATCH_SIZE
+# )
+
+# print("\n===============================")
+# print("        FINAL TEST LOSS        ")
+# print("===============================")
+# print(f"Test MSE: {test_loss:.6f}")
+# print("===============================\n")
+
+for X_test_i, y_test_i, TFx_test_i, TFy_test_i, fname, timestamps in test_sets:
     print("\n# -----------------------------------")
-    print(f"# Sample autoregressive prediction for {fname}")
+    print(f"# Sample autoregressive prediction (TEST SET) for {fname}")
     print("# -----------------------------------")
 
-    init_vals = X_val_i[0].squeeze(-1).cpu().numpy()
+    init_vals = X_test_i[0].squeeze(-1).cpu().numpy()
     init_ts = pd.to_datetime(timestamps[: len(init_vals)])
 
     steps = 20
-
     preds = forecast_autoregressive(model, init_vals, init_ts, steps, lag=lag)
+    true_vals = y_test_i[:steps].cpu().numpy().flatten().tolist()
 
-    true_vals = y_val_i[:steps].cpu().numpy().flatten().tolist()
-
-    print("\n=== SAMPLE PREDICTIONS (first 20 steps) ===")
+    print("\n=== SAMPLE TEST PREDICTIONS (first 20 steps) ===")
     print(f"{'Step':>4} | {'Prediction':>12} | {'Actual':>12}")
     print("-" * 38)
 
