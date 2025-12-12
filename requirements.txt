@@ -2,6 +2,7 @@ kagglehub
 pandas
 numpy
 torch
+<<<<<<< HEAD
 torchtext
 datasets
 huggingface_hub
@@ -10,3 +11,6 @@ holoviews
 bokeh
 statsmodels
 scikit-learn
+=======
+dotenv
+>>>>>>> main
