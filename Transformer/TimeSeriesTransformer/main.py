@@ -294,7 +294,7 @@ def train_model(
 
         if val_loss < best_val:
             best_val = val_loss
-            torch.save(model.state_dict(), "best_mode_learnable_t2v.pth")
+            torch.save(model.state_dict(), "best_model_learnable_t2v_taxi.pth")
 
 
 def forecast_autoregressive(model, init_window_vals, init_window_ts, steps=20, lag=12):
@@ -376,7 +376,7 @@ def evaluate_test(model, X_test, y_test, TFx_test, TFy_test, batch_size=64):
 # Load datasets
 # -------------------------
 lag = 90
-data_dir = "data/processed/nab/realTweets/realTweets"
+DATA_DIR = "data/processed/nab/taxi"
 
 (
     X_train,
@@ -393,7 +393,7 @@ data_dir = "data/processed/nab/realTweets/realTweets"
     TFy_test,
     val_sets,
     test_sets,
-) = load_and_concat_datasets(data_dir, lag=lag)
+) = load_and_concat_datasets(DATA_DIR, lag=lag)
 
 
 MODEL_DIM = 128
