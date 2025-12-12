@@ -3,7 +3,10 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import glob
-from transformer import TransformerTimeSeries
+from transformer import (
+    TransformerTimeSeries,
+    TransformerTimeSeriesWithLearnableTime2Vec,
+)
 import pandas as pd
 
 # -------------------------------------------------
@@ -291,7 +294,7 @@ def train_model(
 
         if val_loss < best_val:
             best_val = val_loss
-            torch.save(model.state_dict(), "best_model.pth")
+            torch.save(model.state_dict(), "best_mode_learnable_t2v.pth")
 
 
 def forecast_autoregressive(model, init_window_vals, init_window_ts, steps=20, lag=12):
@@ -396,10 +399,10 @@ data_dir = "data/processed/nab/realTweets/realTweets"
 MODEL_DIM = 128
 NUM_HEADS = 16
 NUM_LAYERS = 8
-EPOCHS = 5
+EPOCHS = 10
 BATCH_SIZE = 64
 
-model = TransformerTimeSeries(
+model = TransformerTimeSeriesWithLearnableTime2Vec(
     t2v_dim=16,
     model_dim=MODEL_DIM,
     num_heads=NUM_HEADS,
