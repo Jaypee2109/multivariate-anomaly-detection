@@ -4,7 +4,6 @@ import torch.optim as optim
 import numpy as np
 import glob
 from transformer import (
-    TransformerTimeSeries,
     TransformerTimeSeriesWithLearnableTime2Vec,
 )
 import pandas as pd
@@ -121,6 +120,7 @@ def forecast_autoregressive(model, init_window_vals, init_window_ts, steps=20, l
     """
 
     model.eval()
+    device = next(model.parameters()).device
 
     current_vals = list(init_window_vals)
     current_ts = list(pd.to_datetime(init_window_ts))
@@ -129,38 +129,34 @@ def forecast_autoregressive(model, init_window_vals, init_window_ts, steps=20, l
 
     for _ in range(steps):
 
-        # ---- Build lag window ----
+        # ---- Prepare lag window ----
         vals = np.array(current_vals[-lag:], dtype=np.float32)
-
         hours = np.array([t.hour / 23.0 for t in current_ts[-lag:]], dtype=np.float32)
         wdays = np.array(
             [t.weekday() / 6.0 for t in current_ts[-lag:]], dtype=np.float32
         )
         tfx = np.stack([hours, wdays], axis=-1)  # (lag, 2)
 
-        # Prepare input (value + TFx)
+        # Combine values + TFx
         x = torch.tensor(vals)[None, :, None]  # (1, lag, 1)
         tfx_tensor = torch.tensor(tfx)[None, :, :]  # (1, lag, 2)
         inp = torch.cat([x, tfx_tensor], dim=-1).to(device)  # (1, lag, 3)
 
-        # ---- Build TFy for NEXT timestamp ----
+        # ---- Prepare TFy for next timestamp ----
         delta = current_ts[-1] - current_ts[-2]
         next_ts = current_ts[-1] + delta
 
-        next_hour = next_ts.hour / 23.0
-        next_wday = next_ts.weekday() / 6.0
+        tfy = torch.tensor(
+            [[next_ts.hour / 23.0, next_ts.weekday() / 6.0]], dtype=torch.float32
+        ).to(device)
 
-        tfy = torch.tensor([[next_hour, next_wday]], dtype=torch.float32).to(
-            device
-        )  # (1, 2)
-
-        # ---- Forward pass with TFy ----
+        # ---- Model forward ----
         with torch.no_grad():
             pred = model(inp, tfy=tfy).item()
 
         preds.append(pred)
 
-        # ---- Extend window ----
+        # ---- Update window ----
         current_vals.append(pred)
         current_ts.append(next_ts)
 
@@ -228,36 +224,35 @@ def train_model(
     criterion,
     epochs=10,
     batch_size=64,
+    ar_windows=None,
+    ar_eval_every=1,
+    save_path="best_model",
 ):
-
     n_train = len(X_train)
     n_val = len(X_val)
     best_val = float("inf")
+
+    steps_per_epoch = int(np.ceil(len(X_train) / BATCH_SIZE))
 
     for epoch in range(1, epochs + 1):
 
         # ---------- TRAIN ----------
         model.train()
         perm = torch.randperm(n_train)
-
         total_loss = 0
 
         for i in range(0, n_train, batch_size):
             idx = perm[i : i + batch_size]
 
-            xb = X_train[idx].to(device)  # (B, lag, 1)
-            tfxb = TFx_train[idx].to(device)  # (B, lag, 2)
-            tfyb = TFy_train[idx].to(device)  # (B, 2)
+            xb = X_train[idx].to(device)
+            tfxb = TFx_train[idx].to(device)
+            tfyb = TFy_train[idx].to(device)
             yb = y_train[idx].to(device)
 
-            # concat lag-value + lag-timefeatures
-            inp = torch.cat([xb, tfxb], dim=-1)  # (B, lag, 3)
+            inp = torch.cat([xb, tfxb], dim=-1)
 
             optimizer.zero_grad()
-
-            # ← pass TFy into model
             out = model(inp, tfy=tfyb)
-
             loss = criterion(out, yb)
             loss.backward()
 
@@ -267,87 +262,47 @@ def train_model(
 
             total_loss += loss.item()
 
-        train_loss = total_loss / (n_train // batch_size)
+        train_loss = total_loss / steps_per_epoch
 
         # ---------- VALID ----------
         model.eval()
-        val_loss = 0
+        val_loss = 0.0
 
         with torch.no_grad():
             for i in range(0, n_val, batch_size):
-
                 xb = X_val[i : i + batch_size].to(device)
                 tfxb = TFx_val[i : i + batch_size].to(device)
                 tfyb = TFy_val[i : i + batch_size].to(device)
                 yb = y_val[i : i + batch_size].to(device)
 
                 inp = torch.cat([xb, tfxb], dim=-1)
-
-                # ← pass TFy during validation as well
                 out = model(inp, tfy=tfyb)
-
                 val_loss += criterion(out, yb).item()
 
-        val_loss /= n_val // batch_size
+        val_loss /= max(1, n_val // batch_size)
 
-        print(f"Epoch {epoch:02d} | Train: {train_loss:.4f} | Val: {val_loss:.4f}")
+        # ---------- AR VALIDATION ----------
+        ar_str = ""
+        if ar_windows is not None and epoch % ar_eval_every == 0:
+            ar_metrics = evaluate_ar_quick(
+                model, ar_windows, horizons=(1, 5, 10, 20), lag=lag
+            )
 
+            ar_str = " | AR-MAE " + " ".join(
+                [f"h{h}:{v:.3f}" for h, v in ar_metrics.items()]
+            )
+
+        print(
+            f"Epoch {epoch:02d} "
+            f"| Train {train_loss:.4f} "
+            f"| Val {val_loss:.4f}"
+            f"{ar_str}"
+        )
+
+        # ---------- CHECKPOINT ----------
         if val_loss < best_val:
             best_val = val_loss
-            torch.save(model.state_dict(), "best_model_learnable_t2v_taxi.pth")
-
-
-def forecast_autoregressive(model, init_window_vals, init_window_ts, steps=20, lag=12):
-    """
-    Autoregressive forecasting using:
-    - lag window values (init_window_vals)
-    - timestamps for each lag step (init_window_ts)
-    """
-
-    model.eval()
-    device = next(model.parameters()).device
-
-    current_vals = list(init_window_vals)
-    current_ts = list(pd.to_datetime(init_window_ts))
-
-    preds = []
-
-    for _ in range(steps):
-
-        # ---- Prepare lag window ----
-        vals = np.array(current_vals[-lag:], dtype=np.float32)
-        hours = np.array([t.hour / 23.0 for t in current_ts[-lag:]], dtype=np.float32)
-        wdays = np.array(
-            [t.weekday() / 6.0 for t in current_ts[-lag:]], dtype=np.float32
-        )
-        tfx = np.stack([hours, wdays], axis=-1)  # (lag, 2)
-
-        # Combine values + TFx
-        x = torch.tensor(vals)[None, :, None]  # (1, lag, 1)
-        tfx_tensor = torch.tensor(tfx)[None, :, :]  # (1, lag, 2)
-        inp = torch.cat([x, tfx_tensor], dim=-1).to(device)  # (1, lag, 3)
-
-        # ---- Prepare TFy for NEXT timestamp ----
-        delta = current_ts[-1] - current_ts[-2]  # assume uniform frequency
-        next_ts = current_ts[-1] + delta
-
-        tfy = torch.tensor(
-            [[next_ts.hour / 23.0, next_ts.weekday() / 6.0]], dtype=torch.float32
-        ).to(
-            device
-        )  # (1, 2)
-
-        # ---- Model forward ----
-        with torch.no_grad():
-            pred = model(inp, tfy=tfy).item()
-
-        preds.append(pred)
-
-        # ---- Update window ----
-        current_vals.append(pred)
-        current_ts.append(next_ts)
-
-    return preds
+            torch.save(model.state_dict(), save_path + ".pth")
 
 
 def evaluate_test(model, X_test, y_test, TFx_test, TFy_test, batch_size=64):
@@ -373,8 +328,114 @@ def evaluate_test(model, X_test, y_test, TFx_test, TFy_test, batch_size=64):
 
 
 # -------------------------
+# Evaluation
+# -------------------------
+
+
+def mase(y_true, y_pred, y_train, seasonality):
+    naive_err = np.mean(np.abs(y_train[seasonality:] - y_train[:-seasonality]))
+    return np.mean(np.abs(y_true - y_pred)) / (naive_err + 1e-8)
+
+
+def evaluate_autoregressive(
+    model,
+    test_sets,
+    horizons=(1, 5, 10, 20),
+    max_windows=50,
+    lag=288,
+):
+    """
+    Evaluates autoregressive forecasts over multiple rolling windows.
+    Returns horizon-wise MAE and RMSE.
+    """
+    model.eval()
+    results = {h: {"mae": [], "rmse": []} for h in horizons}
+
+    for X, y, TFx, TFy, fname, timestamps in test_sets:
+
+        n_windows = min(max_windows, len(X) - max(horizons))
+        for start in range(n_windows):
+
+            init_vals = X[start].squeeze(-1).cpu().numpy()
+            init_ts = pd.to_datetime(timestamps[start : start + lag])
+
+            preds = forecast_autoregressive(
+                model, init_vals, init_ts, steps=max(horizons), lag=lag
+            )
+
+            true = y[start : start + max(horizons)].cpu().numpy().flatten()
+
+            for h in horizons:
+                p = np.array(preds[:h])
+                t = true[:h]
+
+                mae = np.mean(np.abs(p - t))
+                rmse = np.sqrt(np.mean((p - t) ** 2))
+
+                results[h]["mae"].append(mae)
+                results[h]["rmse"].append(rmse)
+
+    # Aggregate
+    summary = {}
+    for h in horizons:
+        summary[h] = {
+            "MAE": float(np.mean(results[h]["mae"])),
+            "RMSE": float(np.mean(results[h]["rmse"])),
+        }
+
+    return summary
+
+
+def select_ar_validation_windows(val_sets, max_windows=5):
+    ar_windows = []
+    for X, y, TFx, TFy, fname, timestamps in val_sets:
+        if len(X) == 0:
+            continue
+
+        ar_windows.append(
+            (
+                X[0].squeeze(-1).cpu().numpy(),
+                pd.to_datetime(timestamps[: X.shape[1]]),
+                y[:50].cpu().numpy().flatten(),
+                fname,
+            )
+        )
+
+        if len(ar_windows) >= max_windows:
+            break
+
+    return ar_windows
+
+
+def evaluate_ar_quick(model, ar_windows, horizons=(1, 5, 10, 20), lag=288):
+    model.eval()
+    metrics = {h: [] for h in horizons}
+
+    with torch.no_grad():
+        for init_vals, init_ts, true_vals, fname in ar_windows:
+
+            preds = forecast_autoregressive(
+                model,
+                init_vals,
+                init_ts,
+                steps=max(horizons),
+                lag=lag,
+            )
+
+            for h in horizons:
+                p = np.array(preds[:h])
+                t = true_vals[:h]
+
+                mae = np.mean(np.abs(p - t))
+                metrics[h].append(mae)
+
+    return {h: float(np.mean(v)) for h, v in metrics.items()}
+
+
+# -------------------------
 # Load datasets
 # -------------------------
+
 lag = 90
 DATA_DIR = "data/processed/nab/taxi"
 
@@ -395,11 +456,11 @@ DATA_DIR = "data/processed/nab/taxi"
     test_sets,
 ) = load_and_concat_datasets(DATA_DIR, lag=lag)
 
-
+# current best config
 MODEL_DIM = 128
 NUM_HEADS = 16
 NUM_LAYERS = 8
-EPOCHS = 10
+EPOCHS = 2
 BATCH_SIZE = 64
 
 model = TransformerTimeSeriesWithLearnableTime2Vec(
@@ -416,7 +477,7 @@ optimizer = optim.Adam(model.parameters(), lr=1e-3)
 scheduler = torch.optim.lr_scheduler.OneCycleLR(
     optimizer,
     max_lr=1e-3,
-    steps_per_epoch=len(X_train),
+    steps_per_epoch=int(np.ceil(len(X_train) / BATCH_SIZE)),
     epochs=EPOCHS,
     pct_start=0.1,
     anneal_strategy="cos",
@@ -425,6 +486,8 @@ scheduler = torch.optim.lr_scheduler.OneCycleLR(
 # -------------------------
 # Train
 # -------------------------
+ar_val_windows = select_ar_validation_windows(val_sets, max_windows=3)
+
 train_model(
     model,
     X_train,
@@ -440,39 +503,23 @@ train_model(
     criterion,
     epochs=EPOCHS,
     batch_size=BATCH_SIZE,
+    ar_windows=ar_val_windows,
+    ar_eval_every=1,  # or 2–5 for speed
+    save_path=f"learnable_t2v_{EPOCHS}_epochs_{NUM_HEADS}_heads_{NUM_LAYERS}_layers_{MODEL_DIM}_dim",
 )
 
-# -------------------------
-# Load best model & evaluate on TEST set
-# -------------------------
-# model.load_state_dict(torch.load("best_model.pth"))
-# test_loss = evaluate_test(
-#     model, X_test, y_test, TFx_test, TFy_test, batch_size=BATCH_SIZE
-# )
+print("\n===============================")
+print(" AUTOREGRESSIVE TEST EVALUATION ")
+print("===============================\n")
 
-# print("\n===============================")
-# print("        FINAL TEST LOSS        ")
-# print("===============================")
-# print(f"Test MSE: {test_loss:.6f}")
-# print("===============================\n")
+ar_results = evaluate_autoregressive(
+    model,
+    test_sets,
+    horizons=(1, 5, 10, 20),
+    lag=lag,
+)
 
-for X_test_i, y_test_i, TFx_test_i, TFy_test_i, fname, timestamps in test_sets:
-    print("\n# -----------------------------------")
-    print(f"# Sample autoregressive prediction (TEST SET) for {fname}")
-    print("# -----------------------------------")
-
-    init_vals = X_test_i[0].squeeze(-1).cpu().numpy()
-    init_ts = pd.to_datetime(timestamps[: len(init_vals)])
-
-    steps = 20
-    preds = forecast_autoregressive(model, init_vals, init_ts, steps, lag=lag)
-    true_vals = y_test_i[:steps].cpu().numpy().flatten().tolist()
-
-    print("\n=== SAMPLE TEST PREDICTIONS (first 20 steps) ===")
-    print(f"{'Step':>4} | {'Prediction':>12} | {'Actual':>12}")
-    print("-" * 38)
-
-    for i in range(steps):
-        p = preds[i]
-        t = true_vals[i]
-        print(f"{i+1:>4} | {p:12.6f} | {t:12.6f}")
+for h, metrics in ar_results.items():
+    print(
+        f"Horizon {h:>2}: " f"MAE={metrics['MAE']:.4f}, " f"RMSE={metrics['RMSE']:.4f}"
+    )
