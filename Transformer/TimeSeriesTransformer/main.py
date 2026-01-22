@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,7 +14,11 @@ import pandas as pd
 # Setup for Apple Silicon
 # -------------------------------------------------
 torch.set_float32_matmul_precision("medium")
-device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+DEVICE = torch.device(
+    "mps"
+    if torch.backends.mps.is_available()
+    else "cuda" if torch.cuda.is_available() else "cpu"
+)
 
 
 # -------------------------
@@ -37,8 +43,8 @@ def load_and_concat_datasets(data_dir, lag=12):
         df = pd.read_csv(file, parse_dates=["timestamp"]).sort_values("timestamp")
         n = len(df)
 
-        train_end = int(0.70 * n)
-        val_end = int(0.85 * n)
+        train_end = int(0.8 * n)
+        val_end = int(0.9 * n)
 
         # ------------- TRAIN -----------------
         Xtr, ytr, TFxtr, TFytr = build_windows(
@@ -129,25 +135,45 @@ def forecast_autoregressive(model, init_window_vals, init_window_ts, steps=20, l
 
     for _ in range(steps):
 
+        T0 = len(current_ts)
+        total_T = len(current_ts) + steps
+
+        abs_idx = np.arange(T0 - lag, T0, dtype=np.float32) / total_T
+        t_idx = T0 / total_T
+
         # ---- Prepare lag window ----
         vals = np.array(current_vals[-lag:], dtype=np.float32)
         hours = np.array([t.hour / 23.0 for t in current_ts[-lag:]], dtype=np.float32)
+        minutes = np.array(
+            [t.minute / 59.0 for t in current_ts[-lag:]], dtype=np.float32
+        )
         wdays = np.array(
             [t.weekday() / 6.0 for t in current_ts[-lag:]], dtype=np.float32
         )
-        tfx = np.stack([hours, wdays], axis=-1)  # (lag, 2)
 
-        # Combine values + TFx
-        x = torch.tensor(vals)[None, :, None]  # (1, lag, 1)
-        tfx_tensor = torch.tensor(tfx)[None, :, :]  # (1, lag, 2)
-        inp = torch.cat([x, tfx_tensor], dim=-1).to(device)  # (1, lag, 3)
+        tfx = np.stack([hours, minutes, wdays, abs_idx], axis=-1)  # (lag, 4)
+
+        x = torch.tensor(vals)[None, :, None]
+        tfx_tensor = torch.tensor(tfx)[None, :, :]
+        inp = torch.cat([x, tfx_tensor], dim=-1).to(device)  # (1, lag, 4)
 
         # ---- Prepare TFy for next timestamp ----
         delta = current_ts[-1] - current_ts[-2]
         next_ts = current_ts[-1] + delta
 
+        horizon = (len(preds) + 1) / steps  # ∈ (0,1]
+
         tfy = torch.tensor(
-            [[next_ts.hour / 23.0, next_ts.weekday() / 6.0]], dtype=torch.float32
+            [
+                [
+                    next_ts.hour / 23.0,
+                    next_ts.minute / 59.0,
+                    next_ts.weekday() / 6.0,
+                    t_idx,
+                    horizon,
+                ]
+            ],
+            dtype=torch.float32,
         ).to(device)
 
         # ---- Model forward ----
@@ -168,31 +194,39 @@ def build_windows(values, timestamps, lag):
     Returns:
         X:    (N, lag, 1)
         y:    (N, 1)
-        TFx:  (N, lag, 2)   time features for each input timestep
+        TFx:  (N, lag, 3)   time features for each input timestep
         TFy:  (N, 2)        time features for the prediction timestamp
     """
     values = np.array(values, dtype=np.float32)
     timestamps = pd.to_datetime(timestamps)
 
+    T = len(values)
+    time_idx = np.arange(T, dtype=np.float32)
+    time_idx /= time_idx.max() + 1e-6
+
+    minutes = np.array([t.minute / 59.0 for t in timestamps], dtype=np.float32)
     hours = np.array([t.hour / 23.0 for t in timestamps], dtype=np.float32)
     wdays = np.array([t.weekday() / 6.0 for t in timestamps], dtype=np.float32)
-    time_feats = np.stack([hours, wdays], axis=-1)  # (T, 2)
+
+    time_feats = np.stack([hours, minutes, wdays, time_idx], axis=-1)  # (T, 4)
 
     X_list, y_list, TFx_list, TFy_list = [], [], [], []
 
     for i in range(len(values) - lag):
+        horizon = 1.0 / lag
+
         # Inputs
         X_list.append(values[i : i + lag])
         TFx_list.append(time_feats[i : i + lag])
 
         # Target
         y_list.append(values[i + lag])
-        TFy_list.append(time_feats[i + lag])
+        TFy_list.append(np.concatenate([time_feats[i + lag], [horizon]], axis=0))
 
     X = np.array(X_list, dtype=np.float32)[:, :, None]  # (N, lag, 1)
     y = np.array(y_list, dtype=np.float32)[:, None]  # (N, 1)
-    TFx = np.array(TFx_list, dtype=np.float32)  # (N, lag, 2)
-    TFy = np.array(TFy_list, dtype=np.float32)  # (N, 2)
+    TFx = np.array(TFx_list, dtype=np.float32)  # (N, lag, 4)
+    TFy = np.array(TFy_list, dtype=np.float32)  # (N, 5)
 
     return (
         torch.from_numpy(X),
@@ -232,9 +266,12 @@ def train_model(
     n_val = len(X_val)
     best_val = float("inf")
 
-    steps_per_epoch = int(np.ceil(len(X_train) / BATCH_SIZE))
+    steps_per_epoch = int(np.ceil(len(X_train) / batch_size))
 
     for epoch in range(1, epochs + 1):
+
+        # Decay teacher forcing ratio from 1.0 → 0.5 over epochs
+        teacher_forcing_ratio = max(0.5, 1.0 - epoch / epochs)
 
         # ---------- TRAIN ----------
         model.train()
@@ -244,12 +281,28 @@ def train_model(
         for i in range(0, n_train, batch_size):
             idx = perm[i : i + batch_size]
 
-            xb = X_train[idx].to(device)
-            tfxb = TFx_train[idx].to(device)
-            tfyb = TFy_train[idx].to(device)
-            yb = y_train[idx].to(device)
+            xb = X_train[idx].to(DEVICE)  # (B, lag, 1)
+            tfxb = TFx_train[idx].to(DEVICE)  # (B, lag, time_feats)
+            tfyb = TFy_train[idx].to(DEVICE)  # (B, tfy_feats)
+            yb = y_train[idx].to(DEVICE)  # (B, 1)
 
-            inp = torch.cat([xb, tfxb], dim=-1)
+            # --------- Scheduled Sampling ---------
+            xb_modified = xb.clone()
+            B, lag_len, _ = xb.shape
+
+            for b in range(B):
+                for t in range(1, lag_len):
+                    if torch.rand(1).item() > teacher_forcing_ratio:
+                        # Predict previous value using model
+                        with torch.no_grad():
+                            prev_inp = torch.cat(
+                                [xb_modified[b : b + 1, :t, :], tfxb[b : b + 1, :t, :]],
+                                dim=-1,
+                            )
+                            pred_prev = model(prev_inp, tfy=tfyb[b : b + 1]).squeeze(0)
+                        xb_modified[b, t, 0] = pred_prev
+
+            inp = torch.cat([xb_modified, tfxb], dim=-1)
 
             optimizer.zero_grad()
             out = model(inp, tfy=tfyb)
@@ -270,10 +323,10 @@ def train_model(
 
         with torch.no_grad():
             for i in range(0, n_val, batch_size):
-                xb = X_val[i : i + batch_size].to(device)
-                tfxb = TFx_val[i : i + batch_size].to(device)
-                tfyb = TFy_val[i : i + batch_size].to(device)
-                yb = y_val[i : i + batch_size].to(device)
+                xb = X_val[i : i + batch_size].to(DEVICE)
+                tfxb = TFx_val[i : i + batch_size].to(DEVICE)
+                tfyb = TFy_val[i : i + batch_size].to(DEVICE)
+                yb = y_val[i : i + batch_size].to(DEVICE)
 
                 inp = torch.cat([xb, tfxb], dim=-1)
                 out = model(inp, tfy=tfyb)
@@ -314,10 +367,10 @@ def evaluate_test(model, X_test, y_test, TFx_test, TFy_test, batch_size=64):
     with torch.no_grad():
         for i in range(0, n, batch_size):
 
-            xb = X_test[i : i + batch_size].to(device)
-            tfxb = TFx_test[i : i + batch_size].to(device)
-            tfyb = TFy_test[i : i + batch_size].to(device)
-            yb = y_test[i : i + batch_size].to(device)
+            xb = X_test[i : i + batch_size].to(DEVICE)
+            tfxb = TFx_test[i : i + batch_size].to(DEVICE)
+            tfyb = TFy_test[i : i + batch_size].to(DEVICE)
+            yb = y_test[i : i + batch_size].to(DEVICE)
 
             inp = torch.cat([xb, tfxb], dim=-1)
             out = model(inp, tfy=tfyb)
@@ -437,7 +490,11 @@ def evaluate_ar_quick(model, ar_windows, horizons=(1, 5, 10, 20), lag=288):
 # -------------------------
 
 lag = 90
-DATA_DIR = "data/processed/nab/taxi"
+if DEVICE.type in ("cpu", "mps"):
+    DATA_DIR = "data/processed/nab/taxi"
+else:
+    DATA_DIR = "/home/sc.uni-leipzig.de/uj74reda/Transformer/taxi/taxi"
+print("DATA_DIR:", DATA_DIR)
 
 (
     X_train,
@@ -460,7 +517,7 @@ DATA_DIR = "data/processed/nab/taxi"
 MODEL_DIM = 128
 NUM_HEADS = 16
 NUM_LAYERS = 8
-EPOCHS = 2
+EPOCHS = 5
 BATCH_SIZE = 64
 
 model = TransformerTimeSeriesWithLearnableTime2Vec(
@@ -469,7 +526,7 @@ model = TransformerTimeSeriesWithLearnableTime2Vec(
     num_heads=NUM_HEADS,
     num_layers=NUM_LAYERS,
     dropout=0.1,
-).to(device)
+).to(DEVICE)
 
 criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
@@ -486,7 +543,14 @@ scheduler = torch.optim.lr_scheduler.OneCycleLR(
 # -------------------------
 # Train
 # -------------------------
-ar_val_windows = select_ar_validation_windows(val_sets, max_windows=3)
+ar_val_windows = select_ar_validation_windows(val_sets, max_windows=100)
+
+if DEVICE.type in ("cpu", "mps"):
+    SAVE_LOC = f"learnable_t2v_{EPOCHS}_epochs_{NUM_HEADS}_heads_{NUM_LAYERS}_layers_{MODEL_DIM}_dim"
+    AR_EVAL_EVERY = 1
+else:
+    SAVE_LOC = f"/home/sc.uni-leipzig.de/uj74reda/Transformer/models/learnable_t2v_{EPOCHS}_epochs_{NUM_HEADS}_heads_{NUM_LAYERS}_layers_{MODEL_DIM}_dim"
+    AR_EVAL_EVERY = 5
 
 train_model(
     model,
@@ -504,10 +568,9 @@ train_model(
     epochs=EPOCHS,
     batch_size=BATCH_SIZE,
     ar_windows=ar_val_windows,
-    ar_eval_every=1,  # or 2–5 for speed
-    save_path=f"learnable_t2v_{EPOCHS}_epochs_{NUM_HEADS}_heads_{NUM_LAYERS}_layers_{MODEL_DIM}_dim",
+    ar_eval_every=AR_EVAL_EVERY,  # or 2–5 for speed
+    save_path=SAVE_LOC,
 )
-
 print("\n===============================")
 print(" AUTOREGRESSIVE TEST EVALUATION ")
 print("===============================\n")

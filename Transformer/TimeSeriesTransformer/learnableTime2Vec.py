@@ -16,18 +16,23 @@ class LearnableTime2VecSinCos(nn.Module):
         self.out_dim = out_dim
 
         # Linear term
-        self.w0 = nn.Parameter(torch.randn(in_dim))
-        self.b0 = nn.Parameter(torch.randn(1))  # single scalar bias
+        self.w0 = nn.Parameter(torch.randn(in_dim, dtype=torch.float32))
+        self.b0 = nn.Parameter(
+            torch.randn(1, dtype=torch.float32)
+        )  # single scalar bias
 
         # Periodic terms
-        self.W = nn.Parameter(torch.randn(out_dim - 1, in_dim))
-        self.B = nn.Parameter(torch.randn(out_dim - 1))  # one bias per periodic feature
+        self.W = nn.Parameter(torch.randn(out_dim - 1, in_dim, dtype=torch.float32))
+        self.B = nn.Parameter(
+            torch.randn(out_dim - 1, dtype=torch.float32)
+        )  # one bias per periodic feature
 
     def forward(self, t):
         """
         t: (..., in_dim)
         returns: (..., out_dim*2? No, see note)
         """
+        t = t.to(self.w0.dtype)
         # ----- Linear component -----
         v0 = torch.matmul(t, self.w0) + self.b0  # (...,)
 

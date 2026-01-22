@@ -10,3 +10,4 @@ holoviews
 bokeh
 statsmodels
 scikit-learn
+dotenv
