@@ -246,6 +246,44 @@ body {
     border-color: #636efa !important;
 }
 
+/* --- Config Table --- */
+.config-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.config-table-th {
+    background-color: #1a1a1a;
+    color: #ffffff;
+    padding: 8px 12px;
+    border-bottom: 2px solid #444444;
+    text-align: left;
+    font-weight: 600;
+}
+
+.config-table-td {
+    background-color: transparent;
+    color: #cccccc;
+    padding: 6px 12px;
+    border-bottom: 1px solid #333333;
+}
+
+.config-table tr:hover .config-table-td {
+    background-color: #1a1a1a;
+}
+
+/* --- Model Checklist --- */
+.model-checklist label {
+    color: #ffffff !important;
+    margin-right: 16px;
+    cursor: pointer;
+}
+
+.model-checklist input[type="checkbox"] {
+    accent-color: #636efa;
+}
+
 /* --- Utility --- */
 .text-muted-light {
     color: #aaaaaa !important;

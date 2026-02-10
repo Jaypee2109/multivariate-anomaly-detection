@@ -180,7 +180,7 @@ def _timeseries_section() -> dbc.Container:
             dcc.Loading(
                 dcc.Graph(
                     id="ts-graph",
-                    config={"displayModeBar": True, "scrollZoom": True},
+                    config={"displayModeBar": "hover", "scrollZoom": True},
                     style={"height": "420px"},
                 ),
                 type="default",
@@ -202,7 +202,7 @@ def _distribution_section() -> dbc.Container:
                         dcc.Loading(
                             dcc.Graph(
                                 id="hist-graph",
-                                config={"displayModeBar": True},
+                                config={"displayModeBar": "hover"},
                                 style={"height": "350px"},
                             ),
                             type="default",
@@ -214,7 +214,7 @@ def _distribution_section() -> dbc.Container:
                         dcc.Loading(
                             dcc.Graph(
                                 id="box-graph",
-                                config={"displayModeBar": True},
+                                config={"displayModeBar": "hover"},
                                 style={"height": "350px"},
                             ),
                             type="default",
@@ -257,7 +257,7 @@ def _rolling_section() -> dbc.Container:
             dcc.Loading(
                 dcc.Graph(
                     id="rolling-graph",
-                    config={"displayModeBar": True, "scrollZoom": True},
+                    config={"displayModeBar": "hover", "scrollZoom": True},
                     style={"height": "380px"},
                 ),
                 type="default",
@@ -279,7 +279,7 @@ def _acf_section() -> dbc.Container:
                         dcc.Loading(
                             dcc.Graph(
                                 id="acf-graph",
-                                config={"displayModeBar": True},
+                                config={"displayModeBar": "hover"},
                                 style={"height": "320px"},
                             ),
                             type="default",
@@ -291,7 +291,7 @@ def _acf_section() -> dbc.Container:
                         dcc.Loading(
                             dcc.Graph(
                                 id="pacf-graph",
-                                config={"displayModeBar": True},
+                                config={"displayModeBar": "hover"},
                                 style={"height": "320px"},
                             ),
                             type="default",
