@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -191,3 +192,51 @@ class LSTMForecastAnomalyDetector:
         anom = scores >= thr
         anom = anom.fillna(False)
         return anom
+
+    # ------- checkpointing -------
+
+    def save_checkpoint(self, path: str | Path) -> None:
+        """Save model weights and normalization stats to *path*."""
+        if not self._trained or self.model is None:
+            raise ModelNotFittedError("Cannot save checkpoint: model not trained.")
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                "state_dict": self.model.state_dict(),
+                "mean": self.mean_,
+                "std": self.std_,
+                "hyperparams": {
+                    "lookback": self.lookback,
+                    "hidden_size": self.hidden_size,
+                    "num_layers": self.num_layers,
+                    "dropout": self.dropout,
+                    "batch_size": self.batch_size,
+                    "lr": self.lr,
+                    "epochs": self.epochs,
+                    "error_quantile": self.error_quantile,
+                },
+            },
+            path,
+        )
+        logger.info("Saved LSTM checkpoint to %s", path)
+
+    @classmethod
+    def load_checkpoint(cls, path: str | Path) -> LSTMForecastAnomalyDetector:
+        """Reconstruct a trained detector from a checkpoint file."""
+        path = Path(path)
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+        hp = ckpt["hyperparams"]
+        detector = cls(**hp)
+        detector.mean_ = ckpt["mean"]
+        detector.std_ = ckpt["std"]
+        detector.model = LSTMForecaster(
+            input_size=1,
+            hidden_size=hp["hidden_size"],
+            num_layers=hp["num_layers"],
+            dropout=hp["dropout"],
+        ).to(detector._device)
+        detector.model.load_state_dict(ckpt["state_dict"])
+        detector._trained = True
+        logger.info("Loaded LSTM checkpoint from %s", path)
+        return detector

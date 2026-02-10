@@ -47,6 +47,30 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Key inside the labels JSON for this file",
     )
 
+    # Model selection
+    model_group = parser.add_argument_group("Model selection")
+    model_group.add_argument(
+        "--model",
+        action="append",
+        dest="models",
+        choices=["arima", "isolation_forest", "lstm"],
+        help="Train only these models (repeatable, default: all)",
+    )
+
+    # Checkpointing
+    ckpt_group = parser.add_argument_group("Checkpointing")
+    ckpt_group.add_argument(
+        "--save-checkpoints",
+        action="store_true",
+        help="Save model checkpoints after training (LSTM)",
+    )
+    ckpt_group.add_argument(
+        "--load-checkpoint",
+        type=Path,
+        default=None,
+        help="Load LSTM checkpoint from directory instead of training",
+    )
+
     # Tracking
     parser.add_argument(
         "--mlflow",
@@ -96,6 +120,9 @@ def run(args: argparse.Namespace) -> None:
             csv_path=args.csv,
             y_true_labels=y_true_labels,
             log_to_mlflow=args.mlflow,
+            model_names=args.models,
+            save_checkpoints=args.save_checkpoints,
+            load_checkpoint_dir=args.load_checkpoint,
         )
     except Exception as e:
         logger.error("Error during training: %s", e)

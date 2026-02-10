@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Sequence
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -37,6 +38,13 @@ from time_series_transformer.utils.anomaly_io import save_anomaly_artifacts
 
 logger = logging.getLogger(__name__)
 
+# Mapping from CLI names to display names used as dict keys
+MODEL_REGISTRY: dict[str, str] = {
+    "arima": "ARIMA Residual",
+    "isolation_forest": "Isolation Forest",
+    "lstm": "LSTM Forecast",
+}
+
 
 def _seed_everything(seed: int) -> None:
     """Seed all random number generators for reproducibility."""
@@ -46,26 +54,9 @@ def _seed_everything(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def run_pipeline(
-    csv_path: Path,
-    y_true_labels: pd.Series | None = None,
-    log_to_mlflow: bool = False,
-) -> None:
-    # Seed for reproducibility
-    _seed_everything(RANDOM_STATE)
-
-    # 1. Load data
-    y = load_timeseries(csv_path)
-
-    # 2. Train/test split
-    y_train, y_test = train_test_split_series(y, train_ratio=TRAIN_RATIO)
-
-    # 3. Define models
-    models = {
-        # "Rolling Z-Score": RollingZScoreAnomalyDetector(
-        #    window=ROLLING_WINDOW,
-        #    z_thresh=ROLLING_Z_THRESH,
-        # ),
+def _build_all_models() -> dict:
+    """Construct all available baseline models with current config."""
+    return {
         "ARIMA Residual": ARIMAResidualAnomalyDetector(
             order=ARIMA_ORDER,
             z_thresh=ARIMA_Z_THRESH,
@@ -86,6 +77,51 @@ def run_pipeline(
             device="auto",
         ),
     }
+
+
+def run_pipeline(
+    csv_path: Path,
+    y_true_labels: pd.Series | None = None,
+    log_to_mlflow: bool = False,
+    model_names: Sequence[str] | None = None,
+    save_checkpoints: bool = False,
+    load_checkpoint_dir: Path | None = None,
+) -> None:
+    # Seed for reproducibility
+    _seed_everything(RANDOM_STATE)
+
+    # 1. Load data
+    y = load_timeseries(csv_path)
+
+    # 2. Train/test split
+    y_train, y_test = train_test_split_series(y, train_ratio=TRAIN_RATIO)
+
+    # 3. Define models (optionally filtered)
+    all_models = _build_all_models()
+
+    if model_names is not None:
+        selected_display = {MODEL_REGISTRY[n] for n in model_names if n in MODEL_REGISTRY}
+        models = {k: v for k, v in all_models.items() if k in selected_display}
+        if not models:
+            logger.warning("No valid models selected. Available: %s", list(MODEL_REGISTRY.keys()))
+            return
+        logger.info("Training selected models: %s", list(models.keys()))
+    else:
+        models = all_models
+
+    # Load LSTM checkpoint if requested
+    if load_checkpoint_dir is not None and "LSTM Forecast" in models:
+        ckpt_path = load_checkpoint_dir / "lstm_checkpoint.pt"
+        if ckpt_path.exists():
+            logger.info("Loading LSTM checkpoint from %s", ckpt_path)
+            models["LSTM Forecast"] = LSTMForecastAnomalyDetector.load_checkpoint(ckpt_path)
+        else:
+            logger.warning("LSTM checkpoint not found at %s, training from scratch.", ckpt_path)
+
+    # Checkpoint directory
+    ckpt_dir = ARTIFACTS_DIR / "checkpoints"
+    if save_checkpoints:
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     # 4. MLflow setup
     mlflow_mod = None
@@ -135,9 +171,26 @@ def run_pipeline(
                 )
                 log_params_from_model(name, model)
 
+            # Skip fit if model was loaded from checkpoint
+            already_loaded = (
+                name == "LSTM Forecast"
+                and load_checkpoint_dir is not None
+                and hasattr(model, "_trained")
+                and model._trained
+            )
+
             fit_start = time.time()
-            model.fit(y_train)
+            if already_loaded:
+                logger.info("Skipping fit for %s (loaded from checkpoint)", name)
+            else:
+                model.fit(y_train)
             fit_duration = time.time() - fit_start
+
+            # Save checkpoint after training
+            if save_checkpoints and name == "LSTM Forecast" and not already_loaded:
+                ckpt_path = ckpt_dir / "lstm_checkpoint.pt"
+                model.save_checkpoint(ckpt_path)
+                logger.info("Saved LSTM checkpoint to %s", ckpt_path)
 
             scores = model.decision_function(y_test)
             anomalies = model.predict(y_test)
