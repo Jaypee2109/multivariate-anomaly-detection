@@ -157,6 +157,95 @@ body {
     border-radius: 4px;
 }
 
+/* --- Dropdowns (Dash 4.x dcc.Dropdown dark override) --- */
+.dash-dropdown {
+    background-color: #1a1a1a !important;
+    border: 1px solid #444444 !important;
+    border-radius: 6px !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-trigger {
+    background-color: #1a1a1a !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-value,
+.dash-dropdown-placeholder {
+    color: #ffffff !important;
+}
+
+.dash-dropdown-value-item {
+    color: #ffffff !important;
+}
+
+.dash-dropdown-search {
+    background-color: transparent !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-search::placeholder {
+    color: #888888 !important;
+}
+
+.dash-dropdown-content {
+    background-color: #1a1a1a !important;
+    border: 1px solid #444444 !important;
+}
+
+.dash-dropdown-options {
+    background-color: #1a1a1a !important;
+}
+
+.dash-dropdown-option {
+    background-color: #1a1a1a !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-option:hover,
+.dash-dropdown-option[data-highlighted] {
+    background-color: #333333 !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-option[data-selected] {
+    background-color: #424242 !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-clear,
+.dash-dropdown-trigger-icon {
+    color: #aaaaaa !important;
+}
+
+.dash-dropdown-search-icon {
+    color: #aaaaaa !important;
+}
+
+.dash-dropdown-wrapper {
+    background-color: #1a1a1a !important;
+}
+
+/* --- Tooltips --- */
+.stat-tooltip .tooltip-inner {
+    background-color: #333333;
+    color: #ffffff;
+    text-align: left;
+    max-width: 320px;
+    font-size: 0.82rem;
+    padding: 8px 12px;
+}
+
+.stat-tooltip .tooltip-arrow::before {
+    border-top-color: #333333 !important;
+}
+
+/* --- Switches --- */
+.form-check-input:checked {
+    background-color: #636efa !important;
+    border-color: #636efa !important;
+}
+
 /* --- Utility --- */
 .text-muted-light {
     color: #aaaaaa !important;

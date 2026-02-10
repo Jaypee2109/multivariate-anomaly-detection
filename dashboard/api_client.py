@@ -14,9 +14,7 @@ class AnomalyClient:
     """Thin wrapper around the inference API used by the dashboard."""
 
     def __init__(self, base_url: str | None = None, timeout: int = 30) -> None:
-        self.base_url = (
-            base_url or os.getenv("ANOMALY_API_URL", DEFAULT_API_URL)
-        ).rstrip("/")
+        self.base_url = (base_url or os.getenv("ANOMALY_API_URL", DEFAULT_API_URL)).rstrip("/")
         self.timeout = timeout
         self._last_error: str | None = None
 

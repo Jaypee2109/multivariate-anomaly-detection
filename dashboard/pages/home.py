@@ -16,7 +16,7 @@ _project_root = Path(__file__).resolve().parents[2]
 if str(_project_root / "src") not in sys.path:
     sys.path.insert(0, str(_project_root / "src"))
 
-from time_series_transformer.config import RAW_DATA_DIR
+from time_series_transformer.config import RAW_DATA_DIR  # noqa: E402
 
 dash.register_page(__name__, path="/", name="Home")
 
@@ -130,9 +130,7 @@ layout = html.Div(
                                         [
                                             html.H6(
                                                 [
-                                                    html.I(
-                                                        className="bi bi-bullseye me-2"
-                                                    ),
+                                                    html.I(className="bi bi-bullseye me-2"),
                                                     "Goal",
                                                 ]
                                             ),
@@ -154,9 +152,7 @@ layout = html.Div(
                                         [
                                             html.H6(
                                                 [
-                                                    html.I(
-                                                        className="bi bi-database me-2"
-                                                    ),
+                                                    html.I(className="bi bi-database me-2"),
                                                     "Datasets",
                                                 ]
                                             ),
@@ -177,9 +173,7 @@ layout = html.Div(
                                         [
                                             html.H6(
                                                 [
-                                                    html.I(
-                                                        className="bi bi-bar-chart-line me-2"
-                                                    ),
+                                                    html.I(className="bi bi-bar-chart-line me-2"),
                                                     "Metrics",
                                                 ]
                                             ),
@@ -323,8 +317,7 @@ def update_status(_n: int) -> tuple:
 
     if models_loaded:
         model_badges = [
-            dbc.Badge(name, color="primary", className="me-1 mb-1")
-            for name in models_loaded
+            dbc.Badge(name, color="primary", className="me-1 mb-1") for name in models_loaded
         ]
         models_content = html.Div(model_badges)
     else:
@@ -344,12 +337,8 @@ def update_dataset_graph(selected: str) -> dict:
     _, csv_path = NAB_DATASETS.get(selected, list(NAB_DATASETS.values())[0])
 
     if not csv_path.exists():
-        fig = px.line(
-            title="Dataset not found — run 'python -m time_series_transformer data'"
-        )
-        fig.update_layout(
-            template="plotly_dark", paper_bgcolor="#111111", plot_bgcolor="#111111"
-        )
+        fig = px.line(title="Dataset not found — run 'python -m time_series_transformer data'")
+        fig.update_layout(template="plotly_dark", paper_bgcolor="#111111", plot_bgcolor="#111111")
         return fig
 
     df = pd.read_csv(csv_path, parse_dates=["timestamp"])
