@@ -215,6 +215,13 @@ def run_pipeline(
                     if rm is not None:
                         log_range_metrics(rm)
 
+                # Log LSTM checkpoint as MLflow artifact
+                if name == "LSTM Forecast" and hasattr(model, "_trained") and model._trained:
+                    mlflow_ckpt = ckpt_dir / f"mlflow_{csv_path.stem}_lstm.pt"
+                    mlflow_ckpt.parent.mkdir(parents=True, exist_ok=True)
+                    model.save_checkpoint(mlflow_ckpt)
+                    mlflow_mod.log_artifact(str(mlflow_ckpt), artifact_path="checkpoints")
+
     # 6. Save artifacts
     artifacts_path = ARTIFACTS_DIR / "anomalies" / "baseline_anomalies.csv"
     artifacts_path.parent.mkdir(parents=True, exist_ok=True)
@@ -224,3 +231,7 @@ def run_pipeline(
         anomalies_dict=anomalies_dict,
         out_path=artifacts_path,
     )
+
+    # Log anomaly CSV to MLflow as well
+    if log_to_mlflow:
+        mlflow_mod.log_artifact(str(artifacts_path), artifact_path="anomalies")

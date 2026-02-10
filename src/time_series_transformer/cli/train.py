@@ -81,11 +81,19 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 def run(args: argparse.Namespace) -> None:
     from time_series_transformer.baseline_pipeline import run_pipeline
+    from time_series_transformer.utils.data_validation import validate_timeseries
 
     # Validate CSV exists
     if not args.csv.exists():
         logger.error("CSV file not found: %s", args.csv)
         logger.error("Run 'python -m time_series_transformer data' to download datasets.")
+        sys.exit(1)
+
+    # Validate data quality
+    vr = validate_timeseries(args.csv)
+    vr.log()
+    if not vr.valid:
+        logger.error("Data validation failed. Fix the issues above and retry.")
         sys.exit(1)
 
     # Load ground-truth labels if provided
