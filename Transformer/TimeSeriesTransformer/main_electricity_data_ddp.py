@@ -119,7 +119,7 @@ class ElectricityWindowDataset(Dataset):
 
         return (
             torch.from_numpy(x[:, None]),
-            torch.tensor(y)[None],
+            torch.from_numpy(np.array([y], dtype=np.float32)),
             torch.from_numpy(tf_x),
             torch.from_numpy(tf_y),
         )
@@ -210,7 +210,7 @@ def build_dataloaders(
         train_ds,
         batch_size=batch_size,
         sampler=train_sampler,
-        num_workers=4,
+        num_workers=1,
         pin_memory=True,
         persistent_workers=True,
     )
@@ -220,7 +220,7 @@ def build_dataloaders(
             val_ds,
             batch_size=batch_size,
             shuffle=False,
-            num_workers=2,
+            num_workers=1,
             pin_memory=True,
             persistent_workers=True,
         )
@@ -229,7 +229,7 @@ def build_dataloaders(
             test_ds,
             batch_size=batch_size,
             shuffle=False,
-            num_workers=2,
+            num_workers=1,
             pin_memory=True,
             persistent_workers=True,
         )
@@ -520,15 +520,10 @@ def main():
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
-    device = torch.device("cuda", local_rank)
-    torch.set_float32_matmul_precision("medium")
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
-
     MODEL_DIM = 384
     NUM_HEADS = 12
     NUM_LAYERS = 6
-    EPOCHS = 10
+    EPOCHS = 1
     DIM_FEEDFORWARD = 1536
     TFx_DIM = 5
     TFyDIM = 6

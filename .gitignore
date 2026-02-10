@@ -75,8 +75,6 @@ marimo/_lsp/
 __marimo__/
 
 # other
-models/
 /data
-*.pth
 *.pt
 .env

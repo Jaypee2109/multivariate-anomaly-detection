@@ -1,14 +1,17 @@
+import glob
 import os
-from dotenv import load_dotenv
+
+import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
-import glob
+from dotenv import load_dotenv
+from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
+
 from transformer import (
     TransformerTimeSeriesWithLearnableTime2Vec,
 )
-import pandas as pd
 
 # -------------------------------------------------
 # Setup for Apple Silicon
@@ -25,7 +28,6 @@ DEVICE = torch.device(
 # Load and concatenate datasets
 # -------------------------
 def load_and_concat_datasets(data_dir, lag=12):
-
     X_train_list, y_train_list = [], []
     TFx_train_list, TFy_train_list = [], []
 
@@ -39,7 +41,6 @@ def load_and_concat_datasets(data_dir, lag=12):
     test_sets = []
 
     for file in glob.glob(f"{data_dir}/*.csv"):
-
         df = pd.read_csv(file, parse_dates=["timestamp"]).sort_values("timestamp")
         n = len(df)
 
@@ -134,7 +135,6 @@ def forecast_autoregressive(model, init_window_vals, init_window_ts, steps=20, l
     preds = []
 
     for _ in range(steps):
-
         T0 = len(current_ts)
         total_T = len(current_ts) + steps
 
@@ -269,7 +269,6 @@ def train_model(
     steps_per_epoch = int(np.ceil(len(X_train) / batch_size))
 
     for epoch in range(1, epochs + 1):
-
         # Decay teacher forcing ratio from 1.0 → 0.5 over epochs
         teacher_forcing_ratio = max(0.5, 1.0 - epoch / epochs)
 
@@ -346,10 +345,7 @@ def train_model(
             )
 
         print(
-            f"Epoch {epoch:02d} "
-            f"| Train {train_loss:.4f} "
-            f"| Val {val_loss:.4f}"
-            f"{ar_str}"
+            f"Epoch {epoch:02d} | Train {train_loss:.4f} | Val {val_loss:.4f}{ar_str}"
         )
 
         # ---------- CHECKPOINT ----------
@@ -366,7 +362,6 @@ def evaluate_test(model, X_test, y_test, TFx_test, TFy_test, batch_size=64):
 
     with torch.no_grad():
         for i in range(0, n, batch_size):
-
             xb = X_test[i : i + batch_size].to(DEVICE)
             tfxb = TFx_test[i : i + batch_size].to(DEVICE)
             tfyb = TFy_test[i : i + batch_size].to(DEVICE)
@@ -405,10 +400,8 @@ def evaluate_autoregressive(
     results = {h: {"mae": [], "rmse": []} for h in horizons}
 
     for X, y, TFx, TFy, fname, timestamps in test_sets:
-
         n_windows = min(max_windows, len(X) - max(horizons))
         for start in range(n_windows):
-
             init_vals = X[start].squeeze(-1).cpu().numpy()
             init_ts = pd.to_datetime(timestamps[start : start + lag])
 
@@ -466,7 +459,6 @@ def evaluate_ar_quick(model, ar_windows, horizons=(1, 5, 10, 20), lag=288):
 
     with torch.no_grad():
         for init_vals, init_ts, true_vals, fname in ar_windows:
-
             preds = forecast_autoregressive(
                 model,
                 init_vals,
@@ -483,6 +475,70 @@ def evaluate_ar_quick(model, ar_windows, horizons=(1, 5, 10, 20), lag=288):
                 metrics[h].append(mae)
 
     return {h: float(np.mean(v)) for h, v in metrics.items()}
+
+
+def compute_error_threshold(
+    model,
+    X_train,
+    y_train,
+    TFx_train,
+    TFy_train,
+    quantile=0.95,
+    batch_size=64,
+):
+    model.eval()
+    errors = []
+
+    with torch.no_grad():
+        for i in range(0, len(X_train), batch_size):
+            xb = X_train[i : i + batch_size].to(DEVICE)
+            tfxb = TFx_train[i : i + batch_size].to(DEVICE)
+            tfyb = TFy_train[i : i + batch_size].to(DEVICE)
+            yb = y_train[i : i + batch_size].to(DEVICE)
+
+            inp = torch.cat([xb, tfxb], dim=-1)
+            preds = model(inp, tfy=tfyb)
+
+            err = torch.abs(preds - yb)
+            errors.append(err.cpu().numpy())
+
+    errors = np.concatenate(errors).flatten()
+    tau = np.quantile(errors, quantile)
+
+    return float(tau)
+
+
+def error_based_classification_metrics(
+    y_true,
+    y_pred,
+    tau,
+):
+    """
+    y_true, y_pred: (N,)
+    tau: error threshold
+    """
+
+    errors = np.abs(y_pred - y_true)
+
+    # Ground truth & predictions
+    y_true_cls = (errors > tau).astype(int)
+    y_pred_cls = (errors > tau).astype(int)
+
+    # Continuous score for ROC
+    y_score = errors
+
+    metrics = {
+        "precision": precision_score(y_true_cls, y_pred_cls, zero_division=0),
+        "recall": recall_score(y_true_cls, y_pred_cls, zero_division=0),
+        "f1": f1_score(y_true_cls, y_pred_cls, zero_division=0),
+    }
+
+    if len(np.unique(y_true_cls)) > 1:
+        metrics["auc_roc"] = roc_auc_score(y_true_cls, y_score)
+    else:
+        metrics["auc_roc"] = np.nan
+
+    return metrics
 
 
 # -------------------------
@@ -517,7 +573,7 @@ print("DATA_DIR:", DATA_DIR)
 MODEL_DIM = 128
 NUM_HEADS = 16
 NUM_LAYERS = 8
-EPOCHS = 5
+EPOCHS = 10
 BATCH_SIZE = 64
 
 model = TransformerTimeSeriesWithLearnableTime2Vec(
@@ -539,6 +595,84 @@ scheduler = torch.optim.lr_scheduler.OneCycleLR(
     pct_start=0.1,
     anneal_strategy="cos",
 )
+
+
+def evaluate_test_error_classification(
+    model,
+    X_test,
+    y_test,
+    TFx_test,
+    TFy_test,
+    tau,
+    batch_size=64,
+):
+    model.eval()
+
+    y_true_all, y_pred_all = [], []
+
+    with torch.no_grad():
+        for i in range(0, len(X_test), batch_size):
+            xb = X_test[i : i + batch_size].to(DEVICE)
+            tfxb = TFx_test[i : i + batch_size].to(DEVICE)
+            tfyb = TFy_test[i : i + batch_size].to(DEVICE)
+
+            inp = torch.cat([xb, tfxb], dim=-1)
+            preds = model(inp, tfy=tfyb).squeeze(-1)
+
+            y_pred_all.append(preds.cpu().numpy())
+            y_true_all.append(y_test[i : i + batch_size].squeeze(-1).cpu().numpy())
+
+    y_true = np.concatenate(y_true_all)
+    y_pred = np.concatenate(y_pred_all)
+
+    return error_based_classification_metrics(y_true, y_pred, tau)
+
+
+def evaluate_autoregressive_error_classification(
+    model,
+    test_sets,
+    tau,
+    horizons=(1, 5, 10, 20),
+    max_windows=50,
+    lag=288,
+):
+    model.eval()
+
+    results = {
+        h: {"precision": [], "recall": [], "f1": [], "auc_roc": []} for h in horizons
+    }
+
+    for X, y, TFx, TFy, fname, timestamps in test_sets:
+        n_windows = min(max_windows, len(X) - max(horizons))
+        for start in range(n_windows):
+            init_vals = X[start].squeeze(-1).cpu().numpy()
+            init_ts = pd.to_datetime(timestamps[start : start + lag])
+
+            preds = forecast_autoregressive(
+                model,
+                init_vals,
+                init_ts,
+                steps=max(horizons),
+                lag=lag,
+            )
+
+            true_vals = y[start : start + max(horizons)].cpu().numpy().flatten()
+
+            for h in horizons:
+                y_p = np.array(preds[:h])
+                y_t = true_vals[:h]
+
+                m = error_based_classification_metrics(y_t, y_p, tau)
+
+                for k in results[h]:
+                    results[h][k].append(m[k])
+
+    summary = {
+        h: {k: float(np.nanmean(v)) for k, v in results[h].items()} for h in horizons
+    }
+
+    return summary
+
 
 # -------------------------
 # Train
@@ -583,6 +717,35 @@ ar_results = evaluate_autoregressive(
 )
 
 for h, metrics in ar_results.items():
+    print(f"Horizon {h:>2}: MAE={metrics['MAE']:.4f}, RMSE={metrics['RMSE']:.4f}")
+
+
+TAU = compute_error_threshold(
+    model,
+    X_train,
+    y_train,
+    TFx_train,
+    TFy_train,
+    quantile=0.95,
+)
+
+print(f"Error threshold τ = {TAU:.4f}")
+
+
+ar_cls = evaluate_autoregressive_error_classification(
+    model,
+    test_sets,
+    tau=TAU,
+    horizons=(1, 5, 10, 20),
+    lag=lag,
+)
+
+print("\nAR error-based classification:")
+for h, m in ar_cls.items():
     print(
-        f"Horizon {h:>2}: " f"MAE={metrics['MAE']:.4f}, " f"RMSE={metrics['RMSE']:.4f}"
+        f"H{h:>2} | "
+        f"P={m['precision']:.3f} "
+        f"R={m['recall']:.3f} "
+        f"F1={m['f1']:.3f} "
+        f"AUC={m['auc_roc']:.3f}"
     )
