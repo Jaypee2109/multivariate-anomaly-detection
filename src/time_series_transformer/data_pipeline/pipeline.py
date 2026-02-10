@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Optional, Sequence
+
 from time_series_transformer.config import (
     KAGGLE_DATASETS,
     RAW_DATA_DIR,
@@ -13,13 +17,25 @@ from time_series_transformer.data_pipeline.preprocessing import (
 from time_series_transformer.data_pipeline.data_save import save_processed_dataset
 
 
-def run_data_pipeline() -> None:
+def run_data_pipeline(datasets: Optional[Sequence[str]] = None) -> None:
+    """Download and preprocess datasets.
+
+    Args:
+        datasets: Optional list of dataset names to process.
+                  If None, all datasets from KAGGLE_DATASETS are processed.
+    """
     ensure_directories()
+
+    dataset_names = list(datasets) if datasets else list(KAGGLE_DATASETS.keys())
 
     print("[pipeline] Load / Synchronize datasets ...")
     download_all_datasets()
 
-    for dataset_name in KAGGLE_DATASETS.keys():
+    for dataset_name in dataset_names:
+        if dataset_name not in KAGGLE_DATASETS:
+            print(f"[pipeline] Warning: unknown dataset '{dataset_name}', skipping.")
+            continue
+
         print(f"\n[pipeline] === Process dataset: {dataset_name} ===")
 
         raw_dict = load_dataset(RAW_DATA_DIR, dataset_name)
