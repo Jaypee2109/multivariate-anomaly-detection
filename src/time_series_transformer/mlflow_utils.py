@@ -7,7 +7,7 @@ import platform
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import mlflow
 
@@ -24,7 +24,7 @@ def setup_mlflow() -> None:
     mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
 
 
-def _get_git_sha() -> Optional[str]:
+def _get_git_sha() -> str | None:
     """Return the current git commit SHA, or None if not in a repo."""
     try:
         result = subprocess.run(
@@ -45,7 +45,7 @@ def log_environment_info() -> None:
     """Log Python version, torch version, OS, CUDA, and git SHA as MLflow tags."""
     import torch
 
-    tags: Dict[str, str] = {
+    tags: dict[str, str] = {
         "python_version": sys.version.split()[0],
         "torch_version": torch.__version__,
         "platform": platform.platform(),
@@ -74,7 +74,7 @@ def log_params_from_model(name: str, model: Any) -> None:
     Skips private attrs (leading _) and fitted-state attrs (trailing _,
     following the scikit-learn convention).
     """
-    params: Dict[str, str] = {"model_name": name}
+    params: dict[str, str] = {"model_name": name}
     for attr in vars(model):
         if attr.startswith("_") or attr.endswith("_"):
             continue
@@ -90,7 +90,7 @@ def log_params_from_model(name: str, model: Any) -> None:
 
 def log_point_metrics(pm: PointMetrics, prefix: str = "point") -> None:
     """Log PointMetrics fields to the active MLflow run."""
-    metrics: Dict[str, float] = {
+    metrics: dict[str, float] = {
         f"{prefix}/precision": pm.precision,
         f"{prefix}/recall": pm.recall,
         f"{prefix}/f1": pm.f1,
@@ -104,20 +104,24 @@ def log_point_metrics(pm: PointMetrics, prefix: str = "point") -> None:
 
 def log_range_metrics(rm: RangeMetrics, prefix: str = "range") -> None:
     """Log RangeMetrics fields to the active MLflow run."""
-    mlflow.log_metrics({
-        f"{prefix}/precision": rm.precision,
-        f"{prefix}/recall": rm.recall,
-        f"{prefix}/f1": rm.f1,
-        f"{prefix}/n_gt_ranges": float(rm.n_gt_ranges),
-        f"{prefix}/n_pred_ranges": float(rm.n_pred_ranges),
-        f"{prefix}/n_tp_ranges": float(rm.n_tp_ranges),
-    })
+    mlflow.log_metrics(
+        {
+            f"{prefix}/precision": rm.precision,
+            f"{prefix}/recall": rm.recall,
+            f"{prefix}/f1": rm.f1,
+            f"{prefix}/n_gt_ranges": float(rm.n_gt_ranges),
+            f"{prefix}/n_pred_ranges": float(rm.n_pred_ranges),
+            f"{prefix}/n_tp_ranges": float(rm.n_tp_ranges),
+        }
+    )
 
 
 def log_anomaly_summary(n_total: int, n_anomalies: int) -> None:
     """Log basic anomaly statistics."""
-    mlflow.log_metrics({
-        "test_size": float(n_total),
-        "n_anomalies_flagged": float(n_anomalies),
-        "anomaly_rate": n_anomalies / n_total if n_total > 0 else 0.0,
-    })
+    mlflow.log_metrics(
+        {
+            "test_size": float(n_total),
+            "n_anomalies_flagged": float(n_anomalies),
+            "anomaly_rate": n_anomalies / n_total if n_total > 0 else 0.0,
+        }
+    )

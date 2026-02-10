@@ -8,7 +8,6 @@ from pathlib import Path
 
 from time_series_transformer.config import DATA_DIR, RAW_DATA_DIR, TRAIN_RATIO
 
-
 DEFAULT_CSV = RAW_DATA_DIR / "nab" / "realKnownCause" / "realKnownCause" / "nyc_taxi.csv"
 DEFAULT_LABELS = DATA_DIR / "labels" / "nab" / "realKnownCause.json"
 DEFAULT_LABELS_KEY = "realKnownCause/nyc_taxi.csv"
@@ -24,24 +23,31 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     # Data arguments
     data_group = parser.add_argument_group("Data")
     data_group.add_argument(
-        "--csv", type=Path, default=DEFAULT_CSV,
+        "--csv",
+        type=Path,
+        default=DEFAULT_CSV,
         help="Path to input CSV (default: NAB nyc_taxi)",
     )
 
     # Ground-truth evaluation
     eval_group = parser.add_argument_group("Evaluation (optional)")
     eval_group.add_argument(
-        "--labels", type=Path, default=None,
+        "--labels",
+        type=Path,
+        default=None,
         help="Path to ground-truth labels JSON",
     )
     eval_group.add_argument(
-        "--labels-key", type=str, default=DEFAULT_LABELS_KEY,
+        "--labels-key",
+        type=str,
+        default=DEFAULT_LABELS_KEY,
         help="Key inside the labels JSON for this file",
     )
 
     # Tracking
     parser.add_argument(
-        "--mlflow", action="store_true",
+        "--mlflow",
+        action="store_true",
         help="Enable MLflow experiment tracking",
     )
 
@@ -62,11 +68,11 @@ def run(args: argparse.Namespace) -> None:
             print(f"Error: Labels file not found: {args.labels}", file=sys.stderr)
             sys.exit(1)
 
-        from time_series_transformer.data_pipeline.preprocessing import load_csv_to_df
         from time_series_transformer.data_pipeline.labels import (
             load_label_times,
             make_point_labels_from_times,
         )
+        from time_series_transformer.data_pipeline.preprocessing import load_csv_to_df
         from time_series_transformer.split import train_test_split_series
 
         df = load_csv_to_df(args.csv, parse_dates=["timestamp"])

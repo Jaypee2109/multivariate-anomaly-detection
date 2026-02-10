@@ -1,10 +1,7 @@
 import pandas as pd
-from typing import Tuple
 
 
-def train_test_split_series(
-    y: pd.Series, train_ratio: float = 0.7
-) -> Tuple[pd.Series, pd.Series]:
+def train_test_split_series(y: pd.Series, train_ratio: float = 0.7) -> tuple[pd.Series, pd.Series]:
     """
     Time-ordered train/test split for a Series.
     """

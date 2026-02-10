@@ -1,23 +1,20 @@
 import argparse
 from pathlib import Path
 
-from time_series_transformer.data_pipeline.preprocessing import load_csv_to_df
-from time_series_transformer.data_pipeline.labels import (
-    load_label_times,
-    make_point_labels_from_times,
-)
-from time_series_transformer.split import train_test_split_series
 from time_series_transformer.baseline_pipeline import run_pipeline
 from time_series_transformer.config import (
     DATA_DIR,
     RAW_DATA_DIR,
     TRAIN_RATIO,
 )
-
-
-DEFAULT_CSV = (
-    RAW_DATA_DIR / "nab" / "realKnownCause" / "realKnownCause" / "nyc_taxi.csv"
+from time_series_transformer.data_pipeline.labels import (
+    load_label_times,
+    make_point_labels_from_times,
 )
+from time_series_transformer.data_pipeline.preprocessing import load_csv_to_df
+from time_series_transformer.split import train_test_split_series
+
+DEFAULT_CSV = RAW_DATA_DIR / "nab" / "realKnownCause" / "realKnownCause" / "nyc_taxi.csv"
 DEFAULT_LABELS = DATA_DIR / "labels" / "nab" / "realKnownCause.json"
 DEFAULT_LABELS_KEY = "realKnownCause/nyc_taxi.csv"
 
@@ -59,9 +56,7 @@ def main():
     # 2) Load label times & make pointwise labels with DatetimeIndex
     label_times = load_label_times(args.labels, args.labels_key)
     df_for_labels = df.reset_index()
-    y_true_all = make_point_labels_from_times(
-        df_for_labels, label_times, timestamp_col="timestamp"
-    )
+    y_true_all = make_point_labels_from_times(df_for_labels, label_times, timestamp_col="timestamp")
 
     # Align index with y (DatetimeIndex)
     y_true_all.index = y.index

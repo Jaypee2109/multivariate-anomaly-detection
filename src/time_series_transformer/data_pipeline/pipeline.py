@@ -1,23 +1,23 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from time_series_transformer.config import (
     KAGGLE_DATASETS,
-    RAW_DATA_DIR,
     PROCESSED_DATA_DIR,
+    RAW_DATA_DIR,
     ensure_directories,
 )
 from time_series_transformer.data_pipeline.data_download import download_all_datasets
 from time_series_transformer.data_pipeline.data_loading import load_dataset
-from time_series_transformer.data_pipeline.preprocessing import (
-    preprocess_dataset_dict,
-    PreprocessingConfig,
-)
 from time_series_transformer.data_pipeline.data_save import save_processed_dataset
+from time_series_transformer.data_pipeline.preprocessing import (
+    PreprocessingConfig,
+    preprocess_dataset_dict,
+)
 
 
-def run_data_pipeline(datasets: Optional[Sequence[str]] = None) -> None:
+def run_data_pipeline(datasets: Sequence[str] | None = None) -> None:
     """Download and preprocess datasets.
 
     Args:

@@ -1,12 +1,11 @@
 # preprocessing.py
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Dict, Iterable, Optional
 from pathlib import Path
 
 import pandas as pd
-
 
 # ---------- Helper functions ----------
 
@@ -34,9 +33,7 @@ def to_datetime_index(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def standard_scale(
-    df: pd.DataFrame, exclude: Iterable[str] | None = None
-) -> pd.DataFrame:
+def standard_scale(df: pd.DataFrame, exclude: Iterable[str] | None = None) -> pd.DataFrame:
 
     if exclude is None:
         exclude = []
@@ -60,8 +57,8 @@ def standard_scale(
 
 def load_csv_to_df(
     path: str | Path,
-    parse_dates: Optional[Iterable[str]] = None,
-    index_col: Optional[str] = None,
+    parse_dates: Iterable[str] | None = None,
+    index_col: str | None = None,
     **read_csv_kwargs,
 ) -> pd.DataFrame:
 
@@ -90,7 +87,6 @@ def load_csv_to_df(
 
 @dataclass
 class PreprocessingConfig:
-
     scale_numeric: bool = True
     use_datetime_index: bool = True
     # Spaltennamen, die nicht skaliert werden sollen (Labels etc.)
@@ -110,16 +106,16 @@ def preprocess_dataframe(df: pd.DataFrame, config: PreprocessingConfig) -> pd.Da
 
 def preprocess_dataset_dict(
     dataset_name: str,
-    data: Dict[str, pd.DataFrame],
+    data: dict[str, pd.DataFrame],
     config: PreprocessingConfig | None = None,
-) -> Dict[str, pd.DataFrame]:
+) -> dict[str, pd.DataFrame]:
 
     if config is None:
         # Default-Konfig – kannst du pro Dataset anpassen
         config = PreprocessingConfig()
 
     print(f"[preprocess_dataset_dict] Preprocessing on Dataset '{dataset_name}' ...")
-    out: Dict[str, pd.DataFrame] = {}
+    out: dict[str, pd.DataFrame] = {}
 
     for rel_path, df in data.items():
         print(f"[preprocess_dataset_dict]  -> {rel_path}")
@@ -130,7 +126,6 @@ def preprocess_dataset_dict(
 
 if __name__ == "__main__":
     # Test
-    import numpy as np
 
     df_test = pd.DataFrame(
         {

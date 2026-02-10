@@ -4,16 +4,11 @@ from pathlib import Path
 from time_series_transformer.baseline_pipeline import run_pipeline
 from time_series_transformer.config import RAW_DATA_DIR
 
-
-DEFAULT_CSV = (
-    RAW_DATA_DIR / "nab" / "realKnownCause" / "realKnownCause" / "nyc_taxi.csv"
-)
+DEFAULT_CSV = RAW_DATA_DIR / "nab" / "realKnownCause" / "realKnownCause" / "nyc_taxi.csv"
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Run baseline anomaly detection pipeline."
-    )
+    parser = argparse.ArgumentParser(description="Run baseline anomaly detection pipeline.")
     parser.add_argument(
         "--csv",
         type=Path,

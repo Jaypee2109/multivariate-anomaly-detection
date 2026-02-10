@@ -12,6 +12,7 @@ from pathlib import Path
 # Load .env file if python-dotenv is installed (optional)
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass
@@ -20,6 +21,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Env-var helpers (same pattern as dsai-grp1)
 # ---------------------------------------------------------------------------
+
 
 def _env_int(key: str, default: int) -> int:
     val = os.getenv(key)

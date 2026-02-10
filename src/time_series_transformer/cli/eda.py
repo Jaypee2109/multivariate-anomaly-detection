@@ -8,7 +8,6 @@ from pathlib import Path
 
 from time_series_transformer.config import ARTIFACTS_DIR
 
-
 DEFAULT_ANOMALIES = ARTIFACTS_DIR / "anomalies" / "baseline_anomalies.csv"
 
 
@@ -21,16 +20,21 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument(
-        "--csv", type=Path,
+        "--csv",
+        type=Path,
         help="Path to raw time series CSV for basic EDA",
     )
     source.add_argument(
-        "--anomalies", type=Path, nargs="?", const=DEFAULT_ANOMALIES,
+        "--anomalies",
+        type=Path,
+        nargs="?",
+        const=DEFAULT_ANOMALIES,
         help="Path to anomaly artifacts CSV (default: baseline artifacts)",
     )
 
     parser.add_argument(
-        "--no-save-html", action="store_true",
+        "--no-save-html",
+        action="store_true",
         help="Skip saving HTML visualization",
     )
 

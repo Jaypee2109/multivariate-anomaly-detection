@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
 
 import pandas as pd
 
 
 def save_anomaly_artifacts(
     y_test: pd.Series,
-    scores_dict: Dict[str, pd.Series],
-    anomalies_dict: Dict[str, pd.Series],
+    scores_dict: dict[str, pd.Series],
+    anomalies_dict: dict[str, pd.Series],
     out_path: str | Path,
 ) -> None:
     """
@@ -36,8 +35,8 @@ def save_anomaly_artifacts(
 
 def load_anomaly_flags_from_artifacts(
     artifacts_path: str | Path,
-    display_name_map: Dict[str, str] | None = None,
-) -> Dict[str, pd.Series]:
+    display_name_map: dict[str, str] | None = None,
+) -> dict[str, pd.Series]:
     """
     Load anomaly flags from the artifacts CSV and return a dict:
         { display_name: pd.Series[bool] }
@@ -64,7 +63,7 @@ def load_anomaly_flags_from_artifacts(
     df = pd.read_csv(artifacts_path, parse_dates=["timestamp"])
     df = df.set_index("timestamp")
 
-    anomalies_dict: Dict[str, pd.Series] = {}
+    anomalies_dict: dict[str, pd.Series] = {}
 
     # find all *_is_anomaly columns
     suffix = "_is_anomaly"

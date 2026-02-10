@@ -1,14 +1,13 @@
 import os
 from pathlib import Path
-from typing import Dict
 
 import pandas as pd
 
-from time_series_transformer.config import RAW_DATA_DIR, ensure_directories
+from time_series_transformer.config import ensure_directories
 from time_series_transformer.data_pipeline.data_download import download_all_datasets
 
 
-def load_dataset(directory: Path, name: str) -> Dict[str, pd.DataFrame]:
+def load_dataset(directory: Path, name: str) -> dict[str, pd.DataFrame]:
     """
     Recursively loads all CSV files under data/raw/<name>/ into a dict:
 
@@ -24,7 +23,7 @@ def load_dataset(directory: Path, name: str) -> Dict[str, pd.DataFrame]:
         raise FileNotFoundError(f"Raw data for dataset '{name}' not found: {root}.\n")
 
     print(f"[load_dataset] Load CSV: {root}")
-    data: Dict[str, pd.DataFrame] = {}
+    data: dict[str, pd.DataFrame] = {}
 
     for dirpath, dirnames, filenames in os.walk(root):
         # skip macOS metadata folder
@@ -68,13 +67,12 @@ def load_timeseries(path: Path, value_col: str = "value") -> pd.Series:
     return df[value_col]
 
 
-def load_all_datasets(dataset_names: list[str]) -> dict[str, Dict[str, pd.DataFrame]]:
+def load_all_datasets(dataset_names: list[str]) -> dict[str, dict[str, pd.DataFrame]]:
 
     return {name: load_dataset(name) for name in dataset_names}
 
 
 if __name__ == "__main__":
-
     download_all_datasets()
     all_data = load_all_datasets(["smd_onmiad", "nasa_smap_msl", "nab"])
     print({k: len(v) for k, v in all_data.items()})

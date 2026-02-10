@@ -18,6 +18,4 @@ def save_processed_dataset(
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         print(f"[save_processed_dataset] Save: {out_path}")
-        df.to_csv(
-            out_path, index=True if isinstance(df.index, pd.DatetimeIndex) else False
-        )
+        df.to_csv(out_path, index=isinstance(df.index, pd.DatetimeIndex))

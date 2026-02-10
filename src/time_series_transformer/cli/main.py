@@ -7,13 +7,14 @@ import subprocess
 import sys
 
 from time_series_transformer.config import PROJECT_ROOT
-from time_series_transformer.mlflow_utils import MLFLOW_DB_PATH, MLFLOW_TRACKING_URI
+from time_series_transformer.mlflow_utils import MLFLOW_DB_PATH
 
 
 def _setup_mlflow_tracking() -> None:
     """Configure MLflow tracking for commands that need it."""
     try:
         from time_series_transformer.mlflow_utils import setup_mlflow
+
         setup_mlflow()
     except ImportError:
         print("Warning: mlflow not installed.", file=sys.stderr)
@@ -23,10 +24,14 @@ def _run_mlflow(args: argparse.Namespace) -> None:
     """Launch MLflow UI."""
     backend_uri = f"sqlite:///{MLFLOW_DB_PATH}"
     cmd = [
-        "mlflow", "ui",
-        "--backend-store-uri", backend_uri,
-        "--host", args.host,
-        "--port", str(args.port),
+        "mlflow",
+        "ui",
+        "--backend-store-uri",
+        backend_uri,
+        "--host",
+        args.host,
+        "--port",
+        str(args.port),
     ]
     print(f"Starting MLflow UI at http://{args.host}:{args.port}")
     print(f"Backend: {backend_uri}")
@@ -60,7 +65,7 @@ examples:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Register command modules
-    from time_series_transformer.cli import data, train, eda, info
+    from time_series_transformer.cli import data, eda, info, train
 
     data.register(subparsers)
     train.register(subparsers)
@@ -84,9 +89,8 @@ examples:
         sys.exit(0)
 
     # Setup MLflow only when actually needed
-    needs_mlflow = (
-        (args.command == "train" and args.mlflow)
-        or (args.command == "info" and args.run_id is not None)
+    needs_mlflow = (args.command == "train" and args.mlflow) or (
+        args.command == "info" and args.run_id is not None
     )
     if needs_mlflow:
         _setup_mlflow_tracking()

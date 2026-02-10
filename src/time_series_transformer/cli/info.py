@@ -16,16 +16,20 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument(
-        "--data", type=Path,
+        "--data",
+        type=Path,
         help="Path to a dataset CSV file",
     )
     source.add_argument(
-        "--run-id", type=str,
+        "--run-id",
+        type=str,
         help="MLflow run ID to inspect",
     )
 
     parser.add_argument(
-        "-v", "--verbose", action="store_true",
+        "-v",
+        "--verbose",
+        action="store_true",
         help="Show more detail",
     )
 
@@ -62,6 +66,7 @@ def _show_run_info(run_id: str, verbose: bool) -> None:
     """Print summary info about an MLflow run."""
     try:
         import mlflow
+
         from time_series_transformer.mlflow_utils import MLFLOW_TRACKING_URI
     except ImportError:
         print("Error: mlflow not installed.", file=sys.stderr)
@@ -83,26 +88,26 @@ def _show_run_info(run_id: str, verbose: bool) -> None:
 
     tags = {k: v for k, v in run.data.tags.items() if not k.startswith("mlflow.")}
     if tags:
-        print(f"\nTags:")
+        print("\nTags:")
         for k, v in sorted(tags.items()):
             print(f"  {k}: {v}")
 
     params = run.data.params
     if params:
-        print(f"\nParams:")
+        print("\nParams:")
         for k, v in sorted(params.items()):
             print(f"  {k}: {v}")
 
     metrics = run.data.metrics
     if metrics:
-        print(f"\nMetrics:")
+        print("\nMetrics:")
         for k, v in sorted(metrics.items()):
             print(f"  {k}: {v:.6f}" if isinstance(v, float) else f"  {k}: {v}")
 
     if verbose:
         artifacts = client.list_artifacts(run_id)
         if artifacts:
-            print(f"\nArtifacts:")
+            print("\nArtifacts:")
             for a in artifacts:
                 print(f"  {a.path} ({a.file_size or '?'} bytes)")
 

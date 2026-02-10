@@ -21,9 +21,7 @@ def download_dataset(name: str) -> Path:
     target_dir = RAW_DATA_DIR / name
 
     if target_dir.exists():
-        print(
-            f"[download_dataset] Skip '{name}', Directory already exists: {target_dir}"
-        )
+        print(f"[download_dataset] Skip '{name}', Directory already exists: {target_dir}")
         return target_dir
 
     print(f"[download_dataset] Load kaggle-dataset '{slug}' ...")
