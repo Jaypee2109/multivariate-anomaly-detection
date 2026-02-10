@@ -226,7 +226,7 @@ def main():
     TFy_DIM = 6
     LAG = 96
 
-    CHECKPOINT_PATH = "models_new/models/electricity_model_learnable_t2v_1_epochs_12_heads_6_layers_384_dim_1536_dim_feedforward_5_tfx_dim_6_tfy_dim_ddp_fixed.pth"
+    CHECKPOINT_PATH = "models/electricity_model_learnable_t2v_4_epochs_12_heads_6_layers_384_dim_1536_dim_feedforward_5_tfx_dim_6_tfy_dim_ddp_fixed"
 
     # --------------------
     # Load data
