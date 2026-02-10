@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
@@ -8,6 +9,10 @@ import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
+
+from time_series_transformer.exceptions import DataValidationError, ModelNotFittedError
+
+logger = logging.getLogger(__name__)
 
 
 class LSTMForecaster(nn.Module):
@@ -68,7 +73,7 @@ class LSTMForecastAnomalyDetector:
             self._device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
             if self.device.startswith("cuda") and not torch.cuda.is_available():
-                print("[LSTM] CUDA requested but not available, falling back to CPU.")
+                logger.warning("CUDA requested but not available, falling back to CPU.")
                 self._device = "cpu"
             else:
                 self._device = self.device
@@ -94,7 +99,7 @@ class LSTMForecastAnomalyDetector:
         """
         T = self.lookback
         if len(arr) <= T:
-            raise ValueError("Series too short for given lookback.")
+            raise DataValidationError("Series too short for given lookback.")
         xs, ys = [], []
         for i in range(len(arr) - T):
             xs.append(arr[i : i + T])
@@ -149,7 +154,7 @@ class LSTMForecastAnomalyDetector:
         Returns a Series aligned to y.index with NaN for the first `lookback` points.
         """
         if not self._trained or self.model is None:
-            raise RuntimeError("Call fit() before decision_function().")
+            raise ModelNotFittedError("Call fit() before decision_function().")
 
         arr = self._standardize(y)
         X, y_true = self._make_windows(arr)

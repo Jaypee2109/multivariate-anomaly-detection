@@ -10,6 +10,7 @@ import sys
 from time_series_transformer.config import PROJECT_ROOT
 from time_series_transformer.logging_config import setup_logging
 from time_series_transformer.mlflow_utils import MLFLOW_DB_PATH
+from time_series_transformer.utils.startup_checks import log_check_results, run_checks_for_command
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,18 @@ examples:
     if args.command is None:
         parser.print_help()
         sys.exit(0)
+
+    # Pre-flight checks
+    csv_path = getattr(args, "csv", None)
+    use_mlflow = getattr(args, "mlflow", False)
+    results = run_checks_for_command(
+        args.command,
+        csv_path=csv_path,
+        project_root=PROJECT_ROOT,
+        use_mlflow=use_mlflow,
+    )
+    if results:
+        log_check_results(results)
 
     # Setup MLflow only when actually needed
     needs_mlflow = (args.command == "train" and args.mlflow) or (

@@ -6,6 +6,7 @@ import pandas as pd
 
 from time_series_transformer.config import ensure_directories
 from time_series_transformer.data_pipeline.data_download import download_all_datasets
+from time_series_transformer.exceptions import DataNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ def load_dataset(directory: Path, name: str) -> dict[str, pd.DataFrame]:
     ensure_directories()
     root = directory / name
     if not root.exists():
-        raise FileNotFoundError(f"Raw data for dataset '{name}' not found: {root}.\n")
+        raise DataNotFoundError(f"Raw data for dataset '{name}' not found: {root}.\n")
 
     logger.info("Loading CSVs from: %s", root)
     data: dict[str, pd.DataFrame] = {}

@@ -1,6 +1,8 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import IsolationForest
+
+from time_series_transformer.exceptions import ModelNotFittedError
 from time_series_transformer.models.baseline.base import BaseAnomalyDetector
 
 
@@ -26,7 +28,7 @@ class IsolationForestAnomalyDetector(BaseAnomalyDetector):
 
     def decision_function(self, y: pd.Series) -> pd.Series:
         if self.model_ is None:
-            raise RuntimeError("Detector not fitted. Call fit() first.")
+            raise ModelNotFittedError("Detector not fitted. Call fit() first.")
 
         X = y.values.reshape(-1, 1)
         # In sklearn, higher decision_function = more normal.
@@ -36,7 +38,7 @@ class IsolationForestAnomalyDetector(BaseAnomalyDetector):
 
     def predict(self, y: pd.Series) -> pd.Series:
         if self.model_ is None:
-            raise RuntimeError("Detector not fitted. Call fit() first.")
+            raise ModelNotFittedError("Detector not fitted. Call fit() first.")
 
         X = y.values.reshape(-1, 1)
         labels = self.model_.predict(X)  # -1 = anomaly, 1 = normal

@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from time_series_transformer.exceptions import DataNotFoundError, DataValidationError
+
 logger = logging.getLogger(__name__)
 
 # ---------- Helper functions ----------
@@ -68,10 +70,10 @@ def load_csv_to_df(
     path = Path(path)
 
     if not path.exists():
-        raise FileNotFoundError(f"File not found: {path}")
+        raise DataNotFoundError(f"File not found: {path}")
 
     if path.suffix.lower() != ".csv":
-        raise ValueError(f"Expected a .csv file, got: {path.suffix} ({path})")
+        raise DataValidationError(f"Expected a .csv file, got: {path.suffix} ({path})")
 
     df = pd.read_csv(path, parse_dates=parse_dates, **read_csv_kwargs)
 

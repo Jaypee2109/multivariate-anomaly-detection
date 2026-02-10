@@ -9,6 +9,7 @@ from time_series_transformer.config import (
     RAW_DATA_DIR,
     ensure_directories,
 )
+from time_series_transformer.exceptions import ConfigurationError
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ def download_dataset(name: str) -> Path:
     ensure_directories()
 
     if name not in KAGGLE_DATASETS:
-        raise ValueError(f"Unknown dataset: {name}")
+        raise ConfigurationError(f"Unknown dataset: {name}")
 
     slug = KAGGLE_DATASETS[name]
     target_dir = RAW_DATA_DIR / name
