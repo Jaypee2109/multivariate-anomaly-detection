@@ -17,7 +17,7 @@ from mlflow_loader import (
 )
 from plotly.subplots import make_subplots
 
-dash.register_page(__name__, path="/models", name="Model Analysis")
+dash.register_page(__name__, path="/models", name="Model Analysis", order=2)
 
 # ---------------------------------------------------------------------------
 # Chart theme

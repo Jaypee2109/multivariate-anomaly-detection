@@ -18,7 +18,7 @@ from datasets import (
     load_labels,
 )
 
-dash.register_page(__name__, path="/analysis", name="Data Analysis")
+dash.register_page(__name__, path="/analysis", name="Data Analysis", order=1)
 
 # ---------------------------------------------------------------------------
 # Defaults

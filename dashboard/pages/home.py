@@ -18,7 +18,7 @@ if str(_project_root / "src") not in sys.path:
 
 from time_series_transformer.config import RAW_DATA_DIR  # noqa: E402
 
-dash.register_page(__name__, path="/", name="Home")
+dash.register_page(__name__, path="/", name="Home", order=0)
 
 # ---------------------------------------------------------------------------
 # Available NAB datasets for the overview tab selector
