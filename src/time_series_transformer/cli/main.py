@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import subprocess
 import sys
 
 from time_series_transformer.config import PROJECT_ROOT
+from time_series_transformer.logging_config import setup_logging
 from time_series_transformer.mlflow_utils import MLFLOW_DB_PATH
+
+logger = logging.getLogger(__name__)
 
 
 def _setup_mlflow_tracking() -> None:
@@ -17,7 +21,7 @@ def _setup_mlflow_tracking() -> None:
 
         setup_mlflow()
     except ImportError:
-        print("Warning: mlflow not installed.", file=sys.stderr)
+        logger.warning("mlflow not installed.")
 
 
 def _run_mlflow(args: argparse.Namespace) -> None:
@@ -33,12 +37,12 @@ def _run_mlflow(args: argparse.Namespace) -> None:
         "--port",
         str(args.port),
     ]
-    print(f"Starting MLflow UI at http://{args.host}:{args.port}")
-    print(f"Backend: {backend_uri}")
+    logger.info("Starting MLflow UI at http://%s:%s", args.host, args.port)
+    logger.info("Backend: %s", backend_uri)
     try:
         subprocess.run(cmd, cwd=PROJECT_ROOT)
     except FileNotFoundError:
-        print("Error: mlflow CLI not found. Install with: pip install mlflow", file=sys.stderr)
+        logger.error("mlflow CLI not found. Install with: pip install mlflow")
         sys.exit(1)
     except KeyboardInterrupt:
         pass
@@ -62,6 +66,21 @@ examples:
 """,
     )
 
+    # Global verbosity flags
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Show debug-level output",
+    )
+    verbosity.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Show only warnings and errors",
+    )
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Register command modules
@@ -83,6 +102,15 @@ examples:
 
     # Parse and dispatch
     args = parser.parse_args()
+
+    # Configure logging based on verbosity
+    if args.verbose:
+        log_level = "DEBUG"
+    elif args.quiet:
+        log_level = "WARNING"
+    else:
+        log_level = "INFO"
+    setup_logging(log_level)
 
     if args.command is None:
         parser.print_help()

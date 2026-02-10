@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from contextlib import nullcontext
 from pathlib import Path
@@ -33,6 +34,8 @@ from time_series_transformer.models.baseline.isolation_forest import (
 from time_series_transformer.models.baseline.lstm import LSTMForecastAnomalyDetector
 from time_series_transformer.split import train_test_split_series
 from time_series_transformer.utils.anomaly_io import save_anomaly_artifacts
+
+logger = logging.getLogger(__name__)
 
 
 def _seed_everything(seed: int) -> None:
@@ -103,7 +106,7 @@ def run_pipeline(
             mlflow_mod = mlflow
             setup_mlflow()
         except ImportError:
-            print("Warning: mlflow not installed, skipping tracking.")
+            logger.warning("mlflow not installed, skipping tracking.")
             log_to_mlflow = False
 
     scores_dict = {}

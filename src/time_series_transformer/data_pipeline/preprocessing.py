@@ -1,11 +1,14 @@
 # preprocessing.py
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # ---------- Helper functions ----------
 
@@ -45,7 +48,7 @@ def standard_scale(df: pd.DataFrame, exclude: Iterable[str] | None = None) -> pd
     for col in cols_to_scale:
         mean = df[col].mean()
         std = df[col].std()
-        print("Mean, std ", mean, std)
+        logger.debug("col=%s mean=%.4f std=%.4f", col, mean, std)
         if std == 0 or pd.isna(std):
             # Konstante Spalte -> einfach auf 0 setzen
             df[col] = 0.0
@@ -114,11 +117,11 @@ def preprocess_dataset_dict(
         # Default-Konfig – kannst du pro Dataset anpassen
         config = PreprocessingConfig()
 
-    print(f"[preprocess_dataset_dict] Preprocessing on Dataset '{dataset_name}' ...")
+    logger.info("Preprocessing dataset '%s' ...", dataset_name)
     out: dict[str, pd.DataFrame] = {}
 
     for rel_path, df in data.items():
-        print(f"[preprocess_dataset_dict]  -> {rel_path}")
+        logger.info("  -> %s", rel_path)
         out[rel_path] = preprocess_dataframe(df, config)
 
     return out

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -8,6 +9,8 @@ import pandas as pd
 from holoviews import opts
 
 from time_series_transformer.data_pipeline.preprocessing import load_csv_to_df
+
+logger = logging.getLogger(__name__)
 
 hv.extension("bokeh")
 
@@ -65,7 +68,7 @@ def _infer_value_column(df: pd.DataFrame, value_col: str | None) -> str:
         )
 
     inferred = numeric_cols[0]
-    print(f"[EDA] No value_col specified, using first numeric column: '{inferred}'")
+    logger.info("No value_col specified, using first numeric column: '%s'", inferred)
     return inferred
 
 
@@ -159,7 +162,7 @@ def run_basic_eda_from_csv(
         save_path = Path("reports") / f"{csv_path.stem}_basic_eda.html"
         save_path.parent.mkdir(parents=True, exist_ok=True)
         hv.save(layout, save_path, fmt="html")
-        print(f"\n[EDA] Saved basic EDA HTML visualization to: {save_path}")
+        logger.info("Saved basic EDA HTML visualization to: %s", save_path)
 
     return df, layout
 
@@ -259,6 +262,6 @@ def run_anomaly_eda_from_artifacts(
         save_path = Path("reports") / html_name
         save_path.parent.mkdir(parents=True, exist_ok=True)
         hv.save(overlay, save_path, fmt="html")
-        print(f"[EDA] Saved anomaly EDA HTML visualization to: {save_path}")
+        logger.info("Saved anomaly EDA HTML visualization to: %s", save_path)
 
     return overlay

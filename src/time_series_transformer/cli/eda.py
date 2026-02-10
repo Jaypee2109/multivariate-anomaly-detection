@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
 from time_series_transformer.config import ARTIFACTS_DIR
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_ANOMALIES = ARTIFACTS_DIR / "anomalies" / "baseline_anomalies.csv"
 
@@ -42,7 +45,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 def run(args: argparse.Namespace) -> None:
     if args.csv is not None:
         if not args.csv.exists():
-            print(f"Error: File not found: {args.csv}", file=sys.stderr)
+            logger.error("File not found: %s", args.csv)
             sys.exit(1)
 
         from time_series_transformer.analysis.eda import run_basic_eda_from_csv
@@ -54,8 +57,8 @@ def run(args: argparse.Namespace) -> None:
 
     elif args.anomalies is not None:
         if not args.anomalies.exists():
-            print(f"Error: Artifacts file not found: {args.anomalies}", file=sys.stderr)
-            print("Run 'python -m time_series_transformer train' first.", file=sys.stderr)
+            logger.error("Artifacts file not found: %s", args.anomalies)
+            logger.error("Run 'python -m time_series_transformer train' first.")
             sys.exit(1)
 
         from time_series_transformer.analysis.eda import run_anomaly_eda_from_artifacts

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 
 from time_series_transformer.config import KAGGLE_DATASETS
+
+logger = logging.getLogger(__name__)
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -29,5 +32,5 @@ def run(args: argparse.Namespace) -> None:
     try:
         run_data_pipeline(datasets=datasets)
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error("%s", e)
         sys.exit(1)

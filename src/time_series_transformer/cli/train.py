@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
 from time_series_transformer.config import DATA_DIR, RAW_DATA_DIR, TRAIN_RATIO
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CSV = RAW_DATA_DIR / "nab" / "realKnownCause" / "realKnownCause" / "nyc_taxi.csv"
 DEFAULT_LABELS = DATA_DIR / "labels" / "nab" / "realKnownCause.json"
@@ -57,15 +60,15 @@ def run(args: argparse.Namespace) -> None:
 
     # Validate CSV exists
     if not args.csv.exists():
-        print(f"Error: CSV file not found: {args.csv}", file=sys.stderr)
-        print("Run 'python -m time_series_transformer data' to download datasets.", file=sys.stderr)
+        logger.error("CSV file not found: %s", args.csv)
+        logger.error("Run 'python -m time_series_transformer data' to download datasets.")
         sys.exit(1)
 
     # Load ground-truth labels if provided
     y_true_labels = None
     if args.labels is not None:
         if not args.labels.exists():
-            print(f"Error: Labels file not found: {args.labels}", file=sys.stderr)
+            logger.error("Labels file not found: %s", args.labels)
             sys.exit(1)
 
         from time_series_transformer.data_pipeline.labels import (
@@ -95,5 +98,5 @@ def run(args: argparse.Namespace) -> None:
             log_to_mlflow=args.mlflow,
         )
     except Exception as e:
-        print(f"Error during training: {e}", file=sys.stderr)
+        logger.error("Error during training: %s", e)
         sys.exit(1)

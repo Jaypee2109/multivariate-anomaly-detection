@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def save_anomaly_artifacts(
@@ -30,7 +33,7 @@ def save_anomaly_artifacts(
         df[f"{det_name}_is_anomaly"] = flags.astype(int)
 
     df.to_csv(out_path, index_label="timestamp")
-    print(f"[Baseline] Saved anomaly artifacts to: {out_path}")
+    logger.info("Saved anomaly artifacts to: %s", out_path)
 
 
 def load_anomaly_flags_from_artifacts(
@@ -70,7 +73,7 @@ def load_anomaly_flags_from_artifacts(
     anomaly_cols = [c for c in df.columns if c.endswith(suffix)]
 
     if not anomaly_cols:
-        print(f"[Anomaly IO] No '*{suffix}' columns found in {artifacts_path}")
+        logger.warning("No '*%s' columns found in %s", suffix, artifacts_path)
         return anomalies_dict
 
     for col in anomaly_cols:

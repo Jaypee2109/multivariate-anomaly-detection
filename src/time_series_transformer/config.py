@@ -6,8 +6,11 @@ See .env.example for the full list of tunables.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Load .env file if python-dotenv is installed (optional)
 try:
@@ -30,7 +33,7 @@ def _env_int(key: str, default: int) -> int:
     try:
         return int(val)
     except ValueError:
-        print(f"Warning: invalid int for {key}={val!r}, using default={default}")
+        logger.warning("Invalid int for %s=%r, using default=%s", key, val, default)
         return default
 
 
@@ -41,7 +44,7 @@ def _env_float(key: str, default: float) -> float:
     try:
         return float(val)
     except ValueError:
-        print(f"Warning: invalid float for {key}={val!r}, using default={default}")
+        logger.warning("Invalid float for %s=%r, using default=%s", key, val, default)
         return default
 
 
