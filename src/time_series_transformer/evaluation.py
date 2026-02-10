@@ -223,11 +223,13 @@ def summarize_anomalies(
     scores: pd.Series,  # anomaly scores (higher = more anomalous)
     y_true_labels: Optional[pd.Series] = None,  # ground-truth labels, same index
     top_n: int = 10,
-) -> None:
+) -> Optional[Tuple[PointMetrics, Optional[RangeMetrics]]]:
     """
     Print basic summary, top-N anomalous points, and (optionally)
     point- and range-based evaluation metrics if ground-truth labels
     are provided.
+
+    Returns (PointMetrics, RangeMetrics) when labels are given, None otherwise.
     """
     assert (y_test.index == anomalies.index).all()
     assert (y_test.index == scores.index).all()
@@ -284,3 +286,7 @@ def summarize_anomalies(
         print(f"  tp_ranges: {rm.n_tp_ranges}")
 
     print()
+
+    if y_true_labels is not None:
+        return (pm, rm)
+    return None

@@ -51,3 +51,9 @@ LSTM_EPOCHS = 20
 LSTM_BATCH_SIZE = 64
 LSTM_LR = 1e-3
 LSTM_ERROR_QUANTILE = 0.997  # top 1% of errors = anomalies
+
+# MLflow tracking
+MLFLOW_EXPERIMENT_NAME = "Anomaly_Detection"
+
+# Artifacts
+ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"

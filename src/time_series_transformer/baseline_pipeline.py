@@ -1,13 +1,23 @@
+from __future__ import annotations
+
+import time
+from contextlib import nullcontext
 from pathlib import Path
+from typing import Optional
+
+import numpy as np
+import pandas as pd
+import torch
+
 from time_series_transformer.config import (
-    RAW_DATA_DIR,
+    ARTIFACTS_DIR,
+    RANDOM_STATE,
     TRAIN_RATIO,
     ROLLING_WINDOW,
     ROLLING_Z_THRESH,
     ARIMA_ORDER,
     ARIMA_Z_THRESH,
     ISO_CONTAMINATION,
-    RANDOM_STATE,
     LSTM_LOOKBACK,
     LSTM_LR,
     LSTM_BATCH_SIZE,
@@ -31,7 +41,22 @@ from time_series_transformer.models.baseline.lstm import LSTMForecastAnomalyDete
 from time_series_transformer.utils.anomaly_io import save_anomaly_artifacts
 
 
-def run_pipeline(csv_path) -> None:
+def _seed_everything(seed: int) -> None:
+    """Seed all random number generators for reproducibility."""
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def run_pipeline(
+    csv_path: Path,
+    y_true_labels: Optional[pd.Series] = None,
+    log_to_mlflow: bool = False,
+) -> None:
+    # Seed for reproducibility
+    _seed_everything(RANDOM_STATE)
+
     # 1. Load data
     y = load_timeseries(csv_path)
 
@@ -61,26 +86,83 @@ def run_pipeline(csv_path) -> None:
             lr=LSTM_LR,
             epochs=LSTM_EPOCHS,
             error_quantile=LSTM_ERROR_QUANTILE,
-            device="cpu",
+            device="auto",
         ),
     }
+
+    # 4. MLflow setup
+    mlflow_mod = None
+    if log_to_mlflow:
+        try:
+            import mlflow
+            from time_series_transformer.mlflow_utils import (
+                setup_mlflow,
+                log_params_from_model,
+                log_point_metrics,
+                log_range_metrics,
+                log_anomaly_summary,
+                log_environment_info,
+                log_data_hash,
+            )
+            mlflow_mod = mlflow
+            setup_mlflow()
+        except ImportError:
+            print("Warning: mlflow not installed, skipping tracking.")
+            log_to_mlflow = False
 
     scores_dict = {}
     anomalies_dict = {}
 
-    # 4. Train and evaluate
+    # 5. Train and evaluate each model
     for name, model in models.items():
-        model.fit(y_train)
-        scores = model.decision_function(y_test)
-        anomalies = model.predict(y_test)
+        run_ctx = (
+            mlflow_mod.start_run(run_name=f"{name} — {csv_path.stem}")
+            if log_to_mlflow
+            else nullcontext()
+        )
 
-        scores_dict[name] = scores
-        anomalies_dict[name] = anomalies
+        with run_ctx:
+            if log_to_mlflow:
+                log_environment_info()
+                log_data_hash(csv_path)
+                mlflow_mod.log_params({
+                    "dataset": csv_path.name,
+                    "train_ratio": TRAIN_RATIO,
+                    "random_state": RANDOM_STATE,
+                    "train_size": len(y_train),
+                    "test_size": len(y_test),
+                })
+                log_params_from_model(name, model)
 
-        summarize_anomalies(name, y_test, anomalies, scores)
+            fit_start = time.time()
+            model.fit(y_train)
+            fit_duration = time.time() - fit_start
 
-    # 5. Save artifacts
-    artifacts_path = Path("artifacts/anomalies/baseline_anomalies.csv")
+            scores = model.decision_function(y_test)
+            anomalies = model.predict(y_test)
+
+            scores_dict[name] = scores
+            anomalies_dict[name] = anomalies
+
+            result = summarize_anomalies(
+                name, y_test, anomalies, scores,
+                y_true_labels=y_true_labels,
+            )
+
+            if log_to_mlflow:
+                mlflow_mod.log_metric("fit_time_seconds", fit_duration)
+                log_anomaly_summary(
+                    len(y_test), int(anomalies.astype(bool).sum())
+                )
+                if result is not None:
+                    pm, rm = result
+                    log_point_metrics(pm)
+                    if rm is not None:
+                        log_range_metrics(rm)
+
+    # 6. Save artifacts
+    artifacts_path = ARTIFACTS_DIR / "anomalies" / "baseline_anomalies.csv"
+    artifacts_path.parent.mkdir(parents=True, exist_ok=True)
     save_anomaly_artifacts(
         y_test=y_test,
         scores_dict=scores_dict,

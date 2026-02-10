@@ -10,6 +10,7 @@ venv/
 
 # --- VS Code (local settings) ---
 .vscode/
+*.code-workspace
 
 # --- Packaging / build artifacts ---
 *.egg-info/
@@ -73,6 +74,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# MLflow
+mlflow.db
+mlruns/
+
+# Artifacts
+artifacts/
 
 # other
 models/
