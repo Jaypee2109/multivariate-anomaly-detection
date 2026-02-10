@@ -45,6 +45,13 @@ MODEL_REGISTRY: dict[str, str] = {
     "lstm": "LSTM Forecast",
 }
 
+# Mapping from display names to checkpoint filenames
+CHECKPOINT_FILES: dict[str, str] = {
+    "ARIMA Residual": "arima_residual.joblib",
+    "Isolation Forest": "isolation_forest.joblib",
+    "LSTM Forecast": "lstm_checkpoint.pt",
+}
+
 
 def _seed_everything(seed: int) -> None:
     """Seed all random number generators for reproducibility."""
@@ -109,14 +116,23 @@ def run_pipeline(
     else:
         models = all_models
 
-    # Load LSTM checkpoint if requested
-    if load_checkpoint_dir is not None and "LSTM Forecast" in models:
-        ckpt_path = load_checkpoint_dir / "lstm_checkpoint.pt"
-        if ckpt_path.exists():
-            logger.info("Loading LSTM checkpoint from %s", ckpt_path)
-            models["LSTM Forecast"] = LSTMForecastAnomalyDetector.load_checkpoint(ckpt_path)
-        else:
-            logger.warning("LSTM checkpoint not found at %s, training from scratch.", ckpt_path)
+    # Load checkpoints if requested
+    if load_checkpoint_dir is not None:
+        for display_name in list(models.keys()):
+            ckpt_file = CHECKPOINT_FILES.get(display_name)
+            if ckpt_file is None:
+                continue
+            ckpt_path = load_checkpoint_dir / ckpt_file
+            if not ckpt_path.exists():
+                logger.warning("Checkpoint not found at %s, training from scratch.", ckpt_path)
+                continue
+            logger.info("Loading %s checkpoint from %s", display_name, ckpt_path)
+            if display_name == "LSTM Forecast":
+                models[display_name] = LSTMForecastAnomalyDetector.load_checkpoint(ckpt_path)
+            else:
+                from time_series_transformer.models.baseline.base import BaseAnomalyDetector
+
+                models[display_name] = BaseAnomalyDetector.load_checkpoint(ckpt_path)
 
     # Checkpoint directory
     ckpt_dir = ARTIFACTS_DIR / "checkpoints"
@@ -172,11 +188,12 @@ def run_pipeline(
                 log_params_from_model(name, model)
 
             # Skip fit if model was loaded from checkpoint
-            already_loaded = (
-                name == "LSTM Forecast"
-                and load_checkpoint_dir is not None
-                and hasattr(model, "_trained")
-                and model._trained
+            already_loaded = load_checkpoint_dir is not None and (
+                (hasattr(model, "_trained") and model._trained)
+                or (
+                    name in CHECKPOINT_FILES
+                    and (load_checkpoint_dir / CHECKPOINT_FILES[name]).exists()
+                )
             )
 
             fit_start = time.time()
@@ -187,10 +204,10 @@ def run_pipeline(
             fit_duration = time.time() - fit_start
 
             # Save checkpoint after training
-            if save_checkpoints and name == "LSTM Forecast" and not already_loaded:
-                ckpt_path = ckpt_dir / "lstm_checkpoint.pt"
+            if save_checkpoints and not already_loaded and name in CHECKPOINT_FILES:
+                ckpt_path = ckpt_dir / CHECKPOINT_FILES[name]
                 model.save_checkpoint(ckpt_path)
-                logger.info("Saved LSTM checkpoint to %s", ckpt_path)
+                logger.info("Saved %s checkpoint to %s", name, ckpt_path)
 
             scores = model.decision_function(y_test)
             anomalies = model.predict(y_test)

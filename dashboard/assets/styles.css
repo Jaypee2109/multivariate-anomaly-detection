@@ -1,0 +1,163 @@
+/* ======================================================================
+   Anomaly Detection Dashboard — Dark Theme
+   ====================================================================== */
+
+body {
+    background-color: #000000;
+    color: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* --- Navbar --- */
+.navbar-with-border {
+    border-bottom: 1px solid #333333;
+}
+
+.nav-page-link {
+    color: #ffffff !important;
+    margin-left: 12px;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 0.9rem;
+    transition: background-color 0.2s;
+}
+
+.nav-page-link:hover {
+    background-color: #333333;
+}
+
+.nav-page-link.active {
+    background-color: #424242 !important;
+    border: 1px solid #ffffff;
+}
+
+/* --- Page containers --- */
+.page-div {
+    background-color: #000000;
+    color: #ffffff;
+}
+
+.page-div-hero {
+    background-color: #000000;
+    color: #ffffff;
+    min-height: calc(100vh - 56px);
+}
+
+/* --- Cards --- */
+.card-1 {
+    background-color: #232323;
+    color: #ffffff;
+    width: 75%;
+    margin: 0 auto;
+}
+
+.card-2 {
+    background-color: #424242;
+    color: #ffffff;
+    height: 100%;
+}
+
+.card-dark {
+    background-color: #1a1a1a;
+    border: 1px solid #333333;
+    color: #ffffff;
+}
+
+/* --- Status badges --- */
+.status-online {
+    color: #00e676;
+    font-weight: 600;
+}
+
+.status-warning {
+    color: #ffc107;
+    font-weight: 600;
+}
+
+.status-offline {
+    color: #ff5252;
+    font-weight: 600;
+}
+
+/* --- Tabs --- */
+.tab-container {
+    background-color: transparent !important;
+}
+
+.tab {
+    background-color: #111111 !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+
+.tab:hover {
+    background-color: #222222 !important;
+    color: #ffffff !important;
+    border-top: 3px solid #636efa !important;
+}
+
+.tab--selected {
+    background-color: #111111 !important;
+    color: #ffffff !important;
+    border-top: 3px solid #636efa !important;
+}
+
+.diagramm-tab-left {
+    color: #ffffff !important;
+    border-top-left-radius: 3px;
+    border-top: 3px solid transparent;
+    background-color: #111111 !important;
+    border-bottom: none !important;
+    border-left: none !important;
+    border-right: none !important;
+}
+
+.diagramm-tab-right {
+    color: #ffffff !important;
+    border-top-right-radius: 3px;
+    border-top: 3px solid transparent;
+    background-color: #111111 !important;
+    border-bottom: none !important;
+    border-left: none !important;
+    border-right: none !important;
+}
+
+.diagramm-tab-left:hover,
+.diagramm-tab-right:hover {
+    color: #ffffff !important;
+    background-color: #222222 !important;
+    border-top: 3px solid #636efa !important;
+}
+
+.selected-diagramm-tab {
+    color: #ffffff !important;
+    background-color: #111111 !important;
+    border-top: 3px solid #636efa !important;
+    border-bottom: none !important;
+    border-left: none !important;
+    border-right: none !important;
+}
+
+/* --- Scrollbar --- */
+.dark-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #444444 #111111;
+}
+
+.dark-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+
+.dark-scroll::-webkit-scrollbar-track {
+    background: #111111;
+}
+
+.dark-scroll::-webkit-scrollbar-thumb {
+    background-color: #444444;
+    border-radius: 4px;
+}
+
+/* --- Utility --- */
+.text-muted-light {
+    color: #aaaaaa !important;
+}

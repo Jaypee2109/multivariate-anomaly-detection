@@ -134,3 +134,10 @@ LSTM_ERROR_QUANTILE = _env_float("LSTM_ERROR_QUANTILE", 0.997)
 # ---------------------------------------------------------------------------
 
 MLFLOW_EXPERIMENT_NAME = _env_str("MLFLOW_EXPERIMENT_NAME", "Anomaly_Detection")
+
+# ---------------------------------------------------------------------------
+# API Server
+# ---------------------------------------------------------------------------
+
+API_HOST = _env_str("API_HOST", "127.0.0.1")
+API_PORT = _env_int("API_PORT", 8000)

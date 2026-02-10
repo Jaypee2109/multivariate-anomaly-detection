@@ -63,6 +63,8 @@ examples:
   %(prog)s eda --anomalies path/to/artifacts.csv   Visualize anomalies
   %(prog)s info --data path/to/data.csv   Inspect a dataset
   %(prog)s info --run-id <ID>             Inspect an MLflow run
+  %(prog)s serve                          Start inference API server
+  %(prog)s dashboard                      Start interactive dashboard
   %(prog)s mlflow                         Start MLflow UI
 """,
     )
@@ -85,12 +87,14 @@ examples:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Register command modules
-    from time_series_transformer.cli import data, eda, info, train
+    from time_series_transformer.cli import dashboard, data, eda, info, serve, train
 
     data.register(subparsers)
     train.register(subparsers)
     eda.register(subparsers)
     info.register(subparsers)
+    serve.register(subparsers)
+    dashboard.register(subparsers)
 
     # mlflow command (inline — small enough)
     mlflow_parser = subparsers.add_parser(
@@ -144,5 +148,9 @@ examples:
         eda.run(args)
     elif args.command == "info":
         info.run(args)
+    elif args.command == "serve":
+        serve.run(args)
+    elif args.command == "dashboard":
+        dashboard.run(args)
     elif args.command == "mlflow":
         _run_mlflow(args)

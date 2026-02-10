@@ -62,13 +62,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     ckpt_group.add_argument(
         "--save-checkpoints",
         action="store_true",
-        help="Save model checkpoints after training (LSTM)",
+        help="Save model checkpoints after training (all models)",
     )
     ckpt_group.add_argument(
         "--load-checkpoint",
         type=Path,
         default=None,
-        help="Load LSTM checkpoint from directory instead of training",
+        help="Load model checkpoints from directory instead of training",
     )
 
     # Tracking
