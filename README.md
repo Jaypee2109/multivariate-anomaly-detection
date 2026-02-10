@@ -1,153 +1,159 @@
-# Transformer
+# Time Series Transformer
 
-This repository contains a Python project for working with time series data using transformer-based models.
+Anomaly detection on time series data. The project combines statistical/ML baselines (ARIMA, Isolation Forest, LSTM) with a transformer-based detector currently being developed by a project partner.
 
 ## Requirements
 
-- Python 3.11 (or compatible 3.x)
-- `pip`
-
-Python dependencies are defined in:
-
-- `requirements.txt`
-- referenced from `pyproject.toml` for the editable install.
-
----
+- Python >= 3.11
+- `pip` (dependencies listed in `requirements.txt`, pulled automatically by `pyproject.toml`)
+- Kaggle credentials for dataset download (see [kagglehub docs](https://github.com/Kaggle/kagglehub))
 
 ## Installation
 
-### 1. Clone the repository
+```bash
+git clone <REPO-URL>
+cd Transformer
 
-    git clone <REPO-URL>
-    cd Transformer
+python -m venv .venv
 
-Replace `<REPO-URL`> with the HTTPS or SSH URL of this repository.
+# Activate:
+#   Linux/macOS: source .venv/bin/activate
+#   Windows PS:  .\.venv\Scripts\Activate.ps1
 
----
+pip install -e .
+```
 
-### 2. Create and activate a virtual environment
+The editable install registers the `time_series_transformer` package and installs all dependencies.
 
-**On macOS / Linux**
+## Quick Start
 
-    python3 -m venv .venv
-    source .venv/bin/activate
+```bash
+# Download and preprocess datasets
+python -m time_series_transformer data
 
-**On Windows (PowerShell)**
+# Train baseline anomaly detectors with MLflow tracking
+python -m time_series_transformer train --mlflow
 
-    python -m venv .venv
-    .\.venv\Scripts\Activate.ps1
+# Train with ground-truth evaluation
+python -m time_series_transformer train \
+    --csv data/raw/nab/realKnownCause/realKnownCause/nyc_taxi.csv \
+    --labels data/labels/nab/realKnownCause.json \
+    --labels-key realKnownCause/nyc_taxi.csv \
+    --mlflow
 
-You should now see `(.venv)` at the beginning of your terminal prompt.
+# Exploratory data analysis
+python -m time_series_transformer eda --csv data/raw/nab/realKnownCause/realKnownCause/nyc_taxi.csv
+python -m time_series_transformer eda --anomalies
 
----
+# Inspect a dataset or MLflow run
+python -m time_series_transformer info --data data/raw/nab/realKnownCause/realKnownCause/nyc_taxi.csv
+python -m time_series_transformer info --run-id <MLFLOW_RUN_ID> -v
 
-### 3. Install the package and dependencies
+# Launch MLflow UI
+python -m time_series_transformer mlflow
+```
 
-**Recommended: editable install via `pyproject.toml`**
+## CLI Reference
 
-    python -m pip install -e .
+All commands are run via `python -m time_series_transformer <command>`.
 
-This:
+| Command  | Description                                | Key flags                                  |
+|----------|--------------------------------------------|--------------------------------------------|
+| `data`   | Download and preprocess Kaggle datasets    | `--dataset {nab,smd_onmiad,nasa_smap_msl}` |
+| `train`  | Train baseline anomaly detectors           | `--csv`, `--labels`, `--labels-key`, `--mlflow` |
+| `eda`    | Exploratory data analysis / anomaly viz    | `--csv` or `--anomalies`, `--no-save-html` |
+| `info`   | Inspect dataset CSV or MLflow run          | `--data` or `--run-id`, `-v`               |
+| `mlflow` | Launch MLflow UI                           | `--port`, `--host`                         |
 
-- installs the `time_series_transformer` package in editable mode
-- reads dependencies from `requirements.txt` via `pyproject.toml`
+Run `python -m time_series_transformer <command> --help` for full usage.
 
-**Alternative: only from `requirements.txt`**
+## Configuration
 
-    python -m pip install -r requirements.txt
+All hyperparameters and settings live in `src/time_series_transformer/config.py` with sensible defaults.
+Override any value via environment variables:
 
-Use this if you only want the dependencies and don’t care about the editable package.
+```bash
+cp .env.example .env
+# Edit .env, then run commands as usual
+```
 
----
+See [.env.example](.env.example) for the full list of tunables (train ratio, ARIMA order, LSTM epochs, etc.).
 
-## Data folders
+## Datasets
 
-The project uses two main data folders:
+Three Kaggle datasets are preconfigured:
 
-- `data/raw/` – original datasets (as downloaded, unmodified)
-- `data/processed/` – final, ready-to-use datasets for training/evaluation
+| Name             | Kaggle slug                                                  |
+|------------------|--------------------------------------------------------------|
+| `nab`            | `boltzmannbrain/nab` (Numenta Anomaly Benchmark)             |
+| `smd_onmiad`     | `mgusat/smd-onmiad`                                         |
+| `nasa_smap_msl`  | `patrickfleith/nasa-anomaly-detection-dataset-smap-msl`      |
 
-Git ignores actual files in these folders (see `.gitignore`), but the folder structure is kept using `.gitkeep` placeholder files.
+Data is downloaded to `data/raw/`, preprocessed to `data/processed/`. Both directories are git-ignored; folder structure is preserved via `.gitkeep`.
 
-You are expected to:
+## Models
 
-- download or generate data into these folders locally
-- **not** commit large data files to the repository
+### Baselines (implemented)
 
----
+All baseline models implement the `BaseAnomalyDetector` interface (`fit`, `predict`, `decision_function`):
 
-## Usage
+| Model               | Approach                             |
+|----------------------|--------------------------------------|
+| ARIMA Residual       | ARIMA fit, residual z-score threshold |
+| Isolation Forest     | Scikit-learn tree ensemble            |
+| LSTM Forecast        | PyTorch LSTM, forecast-error quantile |
+| Rolling Z-Score      | Rolling mean/std threshold (disabled by default) |
 
-### Running the preprocessing pipeline
+### Transformer (work in progress)
 
-A typical entry point is:
+A transformer-based anomaly detector is being developed by a project partner. Prototype code lives in `src/scratch_transformer/` and `src/scratch_time_series_transformer/` but is **not yet integrated** into the main package or CLI. Once ready it will implement `BaseAnomalyDetector` and plug into the existing pipeline.
 
-- `src/time_series_transformer/data_pipeline/build_preprocessed_data.py`
+## Evaluation Metrics
 
-**From the command line** (project root, venv activated):
+- **Point-level**: precision, recall, F1, AUC-ROC, AUC-PR
+- **Range-level**: precision, recall, F1 over contiguous anomaly ranges
 
-    python -m time_series_transformer.data_pipeline.build_preprocessed_data
+Both are printed to stdout and logged to MLflow when `--mlflow` is used.
 
-Using `-m` ensures Python runs the module within the installed package and respects imports like:
+## Experiment Tracking
 
-    from time_series_transformer.config import ...
-    from time_series_transformer.data_pipeline.data_download import download_all_datasets
+MLflow stores runs in a local SQLite database (`mlflow.db`). Each model gets its own top-level run with:
 
-**In VS Code**
+- Environment info (Python, torch, platform, CUDA, git SHA)
+- Data hash (SHA-256 of input CSV)
+- Model hyperparameters
+- Point and range metrics
+- Fit time
 
-1. Open the `Transformer` folder in VS Code.
-2. Select the interpreter from the `.venv` virtual environment  
-   (`Python: Select Interpreter` → choose `.venv`).
-3. Open i.e. `build_preprocessed_data.py`.
-4. Use the Run/Debug button.
+View results: `python -m time_series_transformer mlflow`
 
-As long as the `.venv` interpreter is selected and `python -m pip install -e .` has been run in that environment, imports such as `from time_series_transformer...` will work.
+## Project Structure
 
----
+```
+src/
+├── time_series_transformer/        # Main package (pip install -e .)
+│   ├── cli/                        # Subcommand-based CLI
+│   ├── data_pipeline/              # Download, load, preprocess, save
+│   ├── models/baseline/            # Anomaly detector implementations
+│   ├── analysis/                   # EDA and visualization
+│   ├── utils/                      # I/O helpers
+│   ├── config.py                   # Central configuration
+│   ├── baseline_pipeline.py        # Training orchestrator
+│   ├── evaluation.py               # Point + range metrics
+│   ├── mlflow_utils.py             # MLflow logging helpers
+│   └── split.py                    # Time-ordered train/test split
+├── scratch_transformer/            # Partner WIP: NLP transformer experiments
+└── scratch_time_series_transformer/ # Partner WIP: time-series transformer prototype
+```
 
-## Adding new dependencies
+See [docs/architecture.md](docs/architecture.md) for detailed architecture and data flow.
+See [docs/decisions.md](docs/decisions.md) for design decision log.
 
-1.  Add the package to `requirements.txt`, e.g.:
+## Adding Dependencies
 
-    numpy
-    pandas
-    torch
-    scikit-learn
-    kagglehub
-
-2.  Install it in your current virtual environment:
-
-        python -m pip install -r requirements.txt
-
-    or, if using the editable install:
-
-        python -m pip install -e .
-
-3.  Commit the updated `requirements.txt`, so collaborators can install the same dependencies.
-
----
-
-## Collaborator setup (macOS)
-
-On macOS:
-
-    git clone <REPO-URL>
-    cd Transformer
-
-    python3 -m venv .venv
-    source .venv/bin/activate
-
-    python3 -m pip install -e .
-    # or:
-    # python3 -m pip install -r requirements.txt
-
-Then in VS Code:
-
-1. Open the `Transformer` folder.
-2. Run `Python: Select Interpreter` and choose `.venv/bin/python`.
-3. Run scripts via the Run button or from the terminal using `python -m ...`.
-
----
+1. Add the package to `requirements.txt`
+2. Run `pip install -e .` (or `pip install -r requirements.txt`)
+3. Commit the updated `requirements.txt`
 
 ## License
 
