@@ -2,6 +2,24 @@
    Anomaly Detection Dashboard — Dark Theme
    ====================================================================== */
 
+/* --- Dash 4.x component CSS variable overrides (dark theme) --- */
+:root {
+    --Dash-Fill-Inverse-Strong: #1a1a1a;
+    --Dash-Fill-Interactive-Strong: #636efa;
+    --Dash-Fill-Interactive-Weak: rgba(99, 110, 250, 0.08);
+    --Dash-Fill-Primary-Hover: rgba(255, 255, 255, 0.04);
+    --Dash-Fill-Primary-Active: rgba(255, 255, 255, 0.08);
+    --Dash-Fill-Disabled: #333333;
+    --Dash-Stroke-Strong: #444444;
+    --Dash-Stroke-Weak: #333333;
+    --Dash-Text-Strong: #ffffff;
+    --Dash-Text-Weak: #aaaaaa;
+    --Dash-Text-Primary: #ffffff;
+    --Dash-Text-Disabled: #666666;
+    --Dash-Shading-Strong: rgba(255, 255, 255, 0.15);
+    --Dash-Shading-Weak: rgba(255, 255, 255, 0.08);
+}
+
 body {
     background-color: #000000;
     color: #ffffff;
@@ -274,7 +292,21 @@ body {
 }
 
 /* --- Model Checklist --- */
+.model-checklist-wrapper {
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+}
+
+.model-checklist {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
 .model-checklist label {
+    display: inline-flex !important;
+    align-items: center;
     color: #ffffff !important;
     margin-right: 16px;
     cursor: pointer;
@@ -282,6 +314,8 @@ body {
 
 .model-checklist input[type="checkbox"] {
     accent-color: #636efa;
+    margin-right: 6px;
+    flex-shrink: 0;
 }
 
 /* --- Utility --- */

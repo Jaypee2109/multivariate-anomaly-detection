@@ -283,8 +283,10 @@ def update_status(_n: int) -> tuple:
             className="status-offline",
         )
         models_content = html.Span(
-            "Start the server with: python -m time_series_transformer serve",
+            [html.I(className="bi bi-question-circle me-1"), "API offline"],
+            title="Start with: python -m time_series_transformer serve",
             className="text-muted-light small",
+            style={"cursor": "help"},
         )
         return api_content, models_content
 
@@ -322,8 +324,10 @@ def update_status(_n: int) -> tuple:
         models_content = html.Div(model_badges)
     else:
         models_content = html.Span(
-            "No models loaded. Train with --save-checkpoints first.",
+            [html.I(className="bi bi-question-circle me-1"), "No models loaded"],
+            title="Train with: python -m time_series_transformer train --save-checkpoints",
             className="text-muted-light small",
+            style={"cursor": "help"},
         )
 
     return api_content, models_content
@@ -337,7 +341,7 @@ def update_dataset_graph(selected: str) -> dict:
     _, csv_path = NAB_DATASETS.get(selected, list(NAB_DATASETS.values())[0])
 
     if not csv_path.exists():
-        fig = px.line(title="Dataset not found — run 'python -m time_series_transformer data'")
+        fig = px.line(title="Dataset not found")
         fig.update_layout(template="plotly_dark", paper_bgcolor="#111111", plot_bgcolor="#111111")
         return fig
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+
 import dash
 import dash_bootstrap_components as dbc
 import plotly.express as px
@@ -75,12 +77,18 @@ def _model_selector() -> dbc.Container:
                         width="auto",
                     ),
                     dbc.Col(
-                        dcc.Checklist(
-                            id="ma-models",
-                            options=[],
-                            value=[],
-                            inline=True,
-                            className="model-checklist",
+                        html.Div(
+                            [
+                                dcc.Checklist(
+                                    id="ma-models",
+                                    options=[],
+                                    value=[],
+                                    inline=True,
+                                    className="model-checklist",
+                                ),
+                                html.Div(id="ma-models-status"),
+                            ],
+                            className="model-checklist-wrapper",
                         ),
                     ),
                 ],
@@ -198,6 +206,7 @@ def _config_section() -> dbc.Container:
 
 layout = html.Div(
     [
+        dcc.Store(id="ma-init", data=True),
         dcc.Store(id="ma-store", storage_type="memory"),
         dbc.Row(
             dbc.Col(
@@ -224,9 +233,9 @@ layout = html.Div(
 
 @callback(
     Output("ma-store", "data"),
-    Input("ma-timeseries", "id"),  # fires once on page load
+    Input("ma-init", "data"),
 )
-def load_store(_: str) -> dict | None:
+def load_store(_: bool) -> dict | None:
     """Load MLflow runs and artifact data into the store."""
     runs_df = load_mlflow_runs()
     artifacts_df = load_artifacts_csv()
@@ -271,12 +280,27 @@ def load_store(_: str) -> dict | None:
 @callback(
     Output("ma-models", "options"),
     Output("ma-models", "value"),
+    Output("ma-models-status", "children"),
     Input("ma-store", "data"),
 )
-def update_model_checklist(store: dict | None) -> tuple[list, list]:
+def update_model_checklist(store: dict | None) -> tuple[list, list, html.Span | None]:
     """Build the model checklist with colored dots."""
-    if not store or store.get("error"):
-        return [], []
+    if not store:
+        hint = html.Span(
+            [html.I(className="bi bi-question-circle me-1"), "Loading..."],
+            className="text-muted-light small",
+        )
+        return [], [], hint
+
+    error = store.get("error", "")
+    if error:
+        hint = html.Span(
+            [html.I(className="bi bi-question-circle me-1"), "No data found"],
+            title=error,
+            className="text-muted-light small",
+            style={"cursor": "help"},
+        )
+        return [], [], hint
 
     models = store.get("models", [])
     color_map = store.get("color_map", {})
@@ -303,7 +327,7 @@ def update_model_checklist(store: dict | None) -> tuple[list, list]:
         for m in models
     ]
 
-    return options, models  # all selected by default
+    return options, models, None  # all selected by default
 
 
 @callback(
@@ -390,7 +414,7 @@ def update_timeseries(store: dict | None, selected: list[str]) -> go.Figure:
 
     import pandas as pd
 
-    df = pd.read_json(store["artifacts"], orient="split")
+    df = pd.read_json(io.StringIO(store["artifacts"]), orient="split")
     artifact_models = store.get("artifact_models", [])
     color_map = store.get("color_map", {})
     models = store.get("models", [])
@@ -510,7 +534,7 @@ def update_distributions(store: dict | None, selected: list[str]) -> go.Figure:
 
     import pandas as pd
 
-    df = pd.read_json(store["artifacts"], orient="split")
+    df = pd.read_json(io.StringIO(store["artifacts"]), orient="split")
     artifact_models = store.get("artifact_models", [])
     color_map = store.get("color_map", {})
     models = store.get("models", [])
@@ -559,7 +583,12 @@ def update_config_table(store: dict | None, selected: list[str]) -> html.Div:
     """Render a parameter comparison table from MLflow run params."""
     if not store or store.get("error") or "runs" not in store:
         msg = store.get("error", "No MLflow data") if store else "Loading..."
-        return html.Span(msg, className="text-muted-light")
+        return html.Span(
+            [html.I(className="bi bi-question-circle me-1"), "No data"],
+            title=msg,
+            className="text-muted-light small",
+            style={"cursor": "help"},
+        )
 
     import pandas as pd
 

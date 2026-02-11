@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+
 import dash
 import dash_bootstrap_components as dbc
 import numpy as np
@@ -388,7 +390,7 @@ def update_statistics(store: dict | None) -> tuple:
         empty = html.Span("—", className="text-muted-light")
         return empty, empty, empty, empty
 
-    df = pd.read_json(store["df"], orient="split")
+    df = pd.read_json(io.StringIO(store["df"]), orient="split")
     v = df["value"]
 
     def _row(label: str, val: str) -> html.Div:
@@ -454,7 +456,7 @@ def update_timeseries(store: dict | None, show_labels: bool) -> go.Figure:
     if not store:
         return _empty_fig("Select a dataset")
 
-    df = pd.read_json(store["df"], orient="split")
+    df = pd.read_json(io.StringIO(store["df"]), orient="split")
     fig = px.line(
         df,
         x="timestamp",
@@ -500,7 +502,7 @@ def update_distribution(store: dict | None) -> tuple[go.Figure, go.Figure]:
     if not store:
         return _empty_fig("No data"), _empty_fig("No data")
 
-    df = pd.read_json(store["df"], orient="split")
+    df = pd.read_json(io.StringIO(store["df"]), orient="split")
 
     # Histogram
     hist_fig = px.histogram(
@@ -537,7 +539,7 @@ def update_rolling(store: dict | None, window_str: str) -> go.Figure:
     if not store:
         return _empty_fig("No data")
 
-    df = pd.read_json(store["df"], orient="split")
+    df = pd.read_json(io.StringIO(store["df"]), orient="split")
     window = int(window_str)
 
     rolling_mean = df["value"].rolling(window=window, min_periods=1).mean()
@@ -596,7 +598,7 @@ def update_acf(store: dict | None) -> tuple[go.Figure, go.Figure]:
     if not store:
         return _empty_fig("No data"), _empty_fig("No data")
 
-    df = pd.read_json(store["df"], orient="split")
+    df = pd.read_json(io.StringIO(store["df"]), orient="split")
     values = df["value"].dropna().values
 
     n_lags = min(60, len(values) // 4)
