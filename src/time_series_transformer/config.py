@@ -61,16 +61,17 @@ def _env_str(key: str, default: str) -> str:
 
 # ---------------------------------------------------------------------------
 # Paths (derived from package location — portable across machines)
+# Env-var overrides allow Docker containers to use mounted volume paths.
 # ---------------------------------------------------------------------------
 
 PACKAGE_ROOT = Path(__file__).resolve().parent  # .../time_series_transformer
 SRC_ROOT = PACKAGE_ROOT.parent  # .../src
 PROJECT_ROOT = SRC_ROOT.parent  # .../Transformer
 
-DATA_DIR = PROJECT_ROOT / "data"
+DATA_DIR = Path(os.environ["DATA_DIR"]) if "DATA_DIR" in os.environ else PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
-ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
+ARTIFACTS_DIR = Path(os.environ["ARTIFACTS_DIR"]) if "ARTIFACTS_DIR" in os.environ else PROJECT_ROOT / "artifacts"
 
 KAGGLE_DATASETS = {
     "smd_onmiad": "mgusat/smd-onmiad",

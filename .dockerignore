@@ -1,0 +1,50 @@
+# Version control
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# IDE
+.vscode/
+*.code-workspace
+.idea/
+
+# Linting / testing
+.ruff_cache/
+.pytest_cache/
+.pytype/
+.pyre/
+
+# Data & artifacts (mounted as volumes at runtime)
+data/
+artifacts/
+models/
+*.pt
+*.pth
+
+# MLflow (mounted as volumes at runtime)
+mlruns/
+mlflow.db
+
+# Environment
+.env
+
+# OS junk
+.DS_Store
+Thumbs.db
+nul
+
+# Scratch / experimental code (not needed for runtime)
+src/scratch_transformer/
+src/scratch_time_series_transformer/

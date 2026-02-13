@@ -221,3 +221,52 @@ Significant architectural and design decisions, recorded in chronological order.
 - New models added via `register_model("name", factory)` — zero changes to core code
 - CLI command: `python -m time_series_transformer benchmark --config configs/benchmark_nab.yaml`
 - Error-tolerant: one failing model/dataset doesn't halt the entire benchmark
+
+---
+
+## D11: WebSocket streaming for live monitoring
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** The Live Monitoring dashboard page originally used HTTP polling — it sent the entire dataset to `/detect/dashboard`, cached all results in the browser, then revealed cached points progressively. This meant inference happened in one big batch and the full dataset lived in browser memory.
+
+**Decision:** Add a `/ws/stream` WebSocket endpoint on the FastAPI server. The server loads the dataset, runs batch inference once, then streams result chunks at a configurable rate. A clientside JavaScript module (`assets/websocket.js`) manages the WebSocket lifecycle and buffers chunks into a Dash store, which Python callbacks consume to update the chart via `extendData`.
+
+**Alternatives considered:**
+
+- Server-Sent Events (SSE) — one-directional, no pause/resume/speed control from client
+- Keep HTTP polling — works but loads full dataset into browser, no incremental delivery
+- Socket.IO — adds a dependency; browser-native WebSocket is sufficient
+
+**Consequences:**
+
+- No new Python dependencies (FastAPI/Starlette supports WebSocket natively)
+- `websocket.js` added to `dashboard/assets/` with two clientside callbacks (`connect`, `drain`)
+- Live Monitoring page rewritten to consume WebSocket chunks instead of HTTP responses
+- Supports pause/resume/reset/speed control messages from the client
+- `ANOMALY_WS_HOST` env var makes the WebSocket host configurable for Docker networking
+
+---
+
+## D12: Docker containerisation with multi-stage build
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** The project has three runtime services (API, dashboard, MLflow). Needed a way to run them reproducibly without manual Python environment setup.
+
+**Decision:** Single `Dockerfile` with a shared `base` stage and three build targets (`api`, `dashboard`, `mlflow`). `docker-compose.yml` orchestrates all three services. Data, artifacts, and MLflow runs are mounted as volumes from the host.
+
+**Alternatives considered:**
+
+- Three separate Dockerfiles — duplicates the dependency installation step
+- Single monolithic container running all services — harder to scale, debug, or restart independently
+- Devcontainer only — useful for development but doesn't help with deployment
+
+**Consequences:**
+
+- `Dockerfile`, `docker-compose.yml`, `.dockerignore` added to project root
+- CPU-only PyTorch in the image (saves ~1.5 GB vs full CUDA build)
+- Dashboard reaches API via Docker DNS name (`api:8000`) using `ANOMALY_API_URL` and `ANOMALY_WS_HOST` env vars
+- `docker compose up` starts all three services with a single command

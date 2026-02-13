@@ -32,6 +32,9 @@ def run(args: argparse.Namespace) -> None:
     # Add the dashboard directory to sys.path so Dash can find pages/
     dashboard_dir = Path(__file__).resolve().parents[3] / "dashboard"
     if not dashboard_dir.exists():
+        # Fallback: look relative to cwd (works in Docker where WORKDIR=/app)
+        dashboard_dir = Path.cwd() / "dashboard"
+    if not dashboard_dir.exists():
         logger.error("Dashboard directory not found: %s", dashboard_dir)
         sys.exit(1)
 

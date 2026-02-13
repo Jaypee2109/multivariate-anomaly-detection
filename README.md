@@ -32,14 +32,14 @@ The editable install registers the `time_series_transformer` package and install
 python -m time_series_transformer data
 
 # Train baseline anomaly detectors with MLflow tracking
-python -m time_series_transformer train --mlflow
+python -m time_series_transformer train --save-checkpoints --mlflow
 
 # Train with ground-truth evaluation
 python -m time_series_transformer train \
     --csv data/raw/nab/realKnownCause/realKnownCause/nyc_taxi.csv \
     --labels data/labels/nab/realKnownCause.json \
     --labels-key realKnownCause/nyc_taxi.csv \
-    --mlflow
+    --save-checkpoints --mlflow
 
 # Benchmark all models on multiple datasets
 python -m time_series_transformer benchmark --config configs/benchmark_nab.yaml
@@ -66,16 +66,16 @@ python -m time_series_transformer mlflow
 
 All commands are run via `python -m time_series_transformer <command>`.
 
-| Command     | Description                                | Key flags                                       |
-|-------------|--------------------------------------------|-------------------------------------------------|
-| `data`      | Download and preprocess Kaggle datasets    | `--dataset {nab,smd_onmiad,nasa_smap_msl}`      |
-| `train`     | Train baseline anomaly detectors           | `--csv`, `--labels`, `--labels-key`, `--mlflow`  |
-| `benchmark` | Evaluate models across multiple datasets   | `--config YAML`, `--csv`, `--model`, `--mlflow`  |
-| `serve`     | Start FastAPI inference server             | `--host`, `--port`, `--reload`                   |
-| `dashboard` | Start interactive Plotly Dash dashboard    | `--host`, `--port`, `--debug`                    |
-| `eda`       | Exploratory data analysis / anomaly viz    | `--csv` or `--anomalies`, `--no-save-html`       |
-| `info`      | Inspect dataset CSV or MLflow run          | `--data` or `--run-id`, `-v`                     |
-| `mlflow`    | Launch MLflow UI                           | `--port`, `--host`                               |
+| Command     | Description                              | Key flags                                                             |
+| ----------- | ---------------------------------------- | --------------------------------------------------------------------- |
+| `data`      | Download and preprocess Kaggle datasets  | `--dataset {nab,smd_onmiad,nasa_smap_msl}`                            |
+| `train`     | Train baseline anomaly detectors         | `--csv`, `--labels`, `--labels-key`, `--save-checkpoints`, `--mlflow` |
+| `benchmark` | Evaluate models across multiple datasets | `--config YAML`, `--csv`, `--model`, `--mlflow`                       |
+| `serve`     | Start FastAPI inference server           | `--host`, `--port`, `--reload`                                        |
+| `dashboard` | Start interactive Plotly Dash dashboard  | `--host`, `--port`, `--debug`                                         |
+| `eda`       | Exploratory data analysis / anomaly viz  | `--csv` or `--anomalies`, `--no-save-html`                            |
+| `info`      | Inspect dataset CSV or MLflow run        | `--data` or `--run-id`, `-v`                                          |
+| `mlflow`    | Launch MLflow UI                         | `--port`, `--host`                                                    |
 
 Run `python -m time_series_transformer <command> --help` for full usage.
 
@@ -95,11 +95,11 @@ See [.env.example](.env.example) for the full list of tunables (train ratio, ARI
 
 Three Kaggle datasets are preconfigured:
 
-| Name             | Kaggle slug                                                  |
-|------------------|--------------------------------------------------------------|
-| `nab`            | `boltzmannbrain/nab` (Numenta Anomaly Benchmark)             |
-| `smd_onmiad`     | `mgusat/smd-onmiad`                                         |
-| `nasa_smap_msl`  | `patrickfleith/nasa-anomaly-detection-dataset-smap-msl`      |
+| Name            | Kaggle slug                                             |
+| --------------- | ------------------------------------------------------- |
+| `nab`           | `boltzmannbrain/nab` (Numenta Anomaly Benchmark)        |
+| `smd_onmiad`    | `mgusat/smd-onmiad`                                     |
+| `nasa_smap_msl` | `patrickfleith/nasa-anomaly-detection-dataset-smap-msl` |
 
 Data is downloaded to `data/raw/`, preprocessed to `data/processed/`. Both directories are git-ignored; folder structure is preserved via `.gitkeep`.
 
@@ -109,12 +109,12 @@ Data is downloaded to `data/raw/`, preprocessed to `data/processed/`. Both direc
 
 All baseline models implement the `BaseAnomalyDetector` interface (`fit`, `predict`, `decision_function`):
 
-| Model               | Approach                             |
-|----------------------|--------------------------------------|
-| ARIMA Residual       | ARIMA fit, residual z-score threshold |
-| Isolation Forest     | Scikit-learn tree ensemble            |
-| LSTM Forecast        | PyTorch LSTM, forecast-error quantile |
-| Rolling Z-Score      | Rolling mean/std threshold (disabled by default) |
+| Model            | Approach                                         |
+| ---------------- | ------------------------------------------------ |
+| ARIMA Residual   | ARIMA fit, residual z-score threshold            |
+| Isolation Forest | Scikit-learn tree ensemble                       |
+| LSTM Forecast    | PyTorch LSTM, forecast-error quantile            |
+| Rolling Z-Score  | Rolling mean/std threshold (disabled by default) |
 
 ### Transformer (work in progress)
 
@@ -164,12 +164,15 @@ python -m time_series_transformer serve --port 9000
 
 Key endpoints:
 
-| Endpoint              | Method | Description                          |
-|-----------------------|--------|--------------------------------------|
-| `/models`             | GET    | List loaded models and their status  |
-| `/predict`            | POST   | Run anomaly detection on input data  |
-| `/model/{name}/config`| GET    | Get model configuration              |
-| `/health`             | GET    | Health check                         |
+| Endpoint            | Method    | Description                              |
+| ------------------- | --------- | ---------------------------------------- |
+| `/health`           | GET       | Health check                             |
+| `/models`           | GET       | List loaded models and their status      |
+| `/models/{name}`    | GET       | Get model details                        |
+| `/detect`           | POST      | Run anomaly detection (JSON)             |
+| `/detect/dashboard` | POST      | Dashboard-optimised parallel arrays      |
+| `/detect/csv`       | POST      | Upload CSV for detection                 |
+| `/ws/stream`        | WebSocket | Stream chunked anomaly detection results |
 
 ## Dashboard
 
@@ -189,6 +192,141 @@ Pages:
 - **Data Analysis** — Interactive time series exploration with zoom/pan
 - **Model Analysis** — Compare model configs and MLflow experiment results
 - **Live Monitoring** — Stream data through models and watch anomaly detection in real time
+
+## Docker
+
+A multi-stage `Dockerfile` and `docker-compose.yml` run all three services (API, dashboard, MLflow) in containers. The image uses `python:3.11-slim` with **CPU-only PyTorch** (~1.5 GB smaller than the full CUDA build).
+
+> **Important:** Docker containers serve data and models from host directories via volume mounts — they do **not** download datasets or train models themselves. You must complete steps 1-3 below (install, download data, train) on the host **before** starting Docker. If you skip these steps, the services will start but the API will have no models loaded and the dashboard will show no data.
+
+This section walks through every step needed to go from a fresh clone to a fully running system.
+
+### Step 0: Install prerequisites
+
+1. **Python >= 3.11** — [python.org/downloads](https://www.python.org/downloads/)
+2. **Docker Desktop** — [docker.com/get-started](https://www.docker.com/get-started/) (includes `docker compose`)
+3. **Kaggle credentials** — needed to download datasets. Create an API token at [kaggle.com/settings](https://www.kaggle.com/settings) and place `kaggle.json` in:
+   - Linux/macOS: `~/.kaggle/kaggle.json`
+   - Windows: `C:\Users\<you>\.kaggle\kaggle.json`
+
+### Step 1: Clone and install the Python package
+
+```bash
+git clone <REPO-URL>
+cd Transformer
+
+python -m venv .venv
+
+# Activate:
+#   Linux/macOS: source .venv/bin/activate
+#   Windows PS:  .\.venv\Scripts\Activate.ps1
+
+pip install -e .
+```
+
+### Step 2: Download datasets
+
+```bash
+python -m time_series_transformer data
+```
+
+This downloads the NAB, SMD, and NASA SMAP/MSL datasets from Kaggle into `data/raw/` and preprocesses them into `data/processed/`.
+
+### Step 3: Train baseline models
+
+```bash
+python -m time_series_transformer train \
+    --csv data/raw/nab/realKnownCause/realKnownCause/nyc_taxi.csv \
+    --labels data/labels/nab/realKnownCause.json \
+    --labels-key realKnownCause/nyc_taxi.csv \
+    --save-checkpoints \
+    --mlflow
+```
+
+The `--save-checkpoints` flag is required — without it, trained models are not persisted and the inference server will have nothing to load. `--mlflow` enables experiment tracking (optional but recommended).
+
+After training, verify the checkpoints exist:
+
+```
+artifacts/checkpoints/
+├── arima_residual.joblib
+├── isolation_forest.joblib
+├── lstm_checkpoint.pt
+└── rolling_zscore.joblib
+```
+
+> **Note:** Steps 1-3 populate the `data/` and `artifacts/` directories on your host machine. Docker mounts these directories as volumes — it does not copy or generate them. If `data/` or `artifacts/checkpoints/` are empty, the containers will start but produce no useful results.
+
+### Step 4: Build and start Docker containers
+
+```bash
+docker compose build            # Build all three images (~5-10 min first time)
+docker compose up -d            # Start services in the background
+docker compose ps               # Check they're running
+```
+
+Once running, open:
+
+| Service     | URL                   | Description              |
+| ----------- | --------------------- | ------------------------ |
+| `api`       | http://localhost:8000 | FastAPI inference server |
+| `dashboard` | http://localhost:8050 | Plotly Dash dashboard    |
+| `mlflow`    | http://localhost:5000 | MLflow tracking UI       |
+
+Verify the API loaded the models:
+
+```bash
+curl http://localhost:8000/health
+# {"status":"healthy","models_loaded":["arima_residual","isolation_forest","lstm","rolling_zscore"],...}
+```
+
+### How it works
+
+The `Dockerfile` defines a shared **base** stage (installs Python deps + the package) and three lightweight **target** stages:
+
+```
+base  (python:3.11-slim + pip install .)
+ ├── api        → serve --host 0.0.0.0        :8000
+ ├── dashboard  → dashboard --host 0.0.0.0    :8050
+ └── mlflow     → mlflow ui --host 0.0.0.0    :5000
+```
+
+`docker-compose.yml` wires them together:
+
+- **api** mounts `./data` and `./artifacts`, sets `ANOMALY_CHECKPOINT_DIR=/app/artifacts/checkpoints`
+- **dashboard** mounts `./data`, sets `ANOMALY_API_URL=http://api:8000` and `ANOMALY_WS_HOST=api:8000` so it reaches the API via Docker's internal DNS (not `localhost`)
+- **mlflow** mounts `./mlruns` and uses a named volume for its SQLite database
+- `dashboard` has `depends_on: api` to ensure correct startup order
+
+Data, checkpoints, and MLflow runs live on the host and are **mounted as volumes** — nothing is baked into the image:
+
+| Host path      | Container path      | Used by        |
+| -------------- | ------------------- | -------------- |
+| `./data`       | `/app/data`         | api, dashboard |
+| `./artifacts`  | `/app/artifacts`    | api            |
+| `./mlruns`     | `/app/mlruns`       | mlflow         |
+| (named volume) | `/app/db/mlflow.db` | mlflow         |
+
+### Common commands
+
+```bash
+docker compose up -d            # Start all services (detached)
+docker compose ps               # Check running containers
+docker compose logs -f          # Stream all logs
+docker compose logs -f api      # Stream API logs only
+docker compose down             # Stop and remove containers
+docker compose up -d --build    # Rebuild images after code changes
+```
+
+### Building individual images
+
+You can also build a single target without compose:
+
+```bash
+docker build --target api       -t tst-api .
+docker build --target dashboard -t tst-dashboard .
+docker build --target mlflow    -t tst-mlflow .
+```
 
 ## Experiment Tracking
 
@@ -227,10 +365,15 @@ dashboard/                          # Plotly Dash interactive dashboard
 ├── api_client.py                   # HTTP client for the inference API
 ├── datasets.py                     # Dataset registry for the dashboard
 ├── mlflow_loader.py                # MLflow data loader
+├── assets/                         # Static assets (CSS, JS)
+│   └── websocket.js                # Clientside WebSocket manager for live monitoring
 └── pages/                          # Dashboard pages (home, data, model, live)
 
 configs/                            # YAML benchmark configs
 └── benchmark_nab.yaml              # NAB realKnownCause datasets
+
+Dockerfile                          # Multi-stage build (api / dashboard / mlflow)
+docker-compose.yml                  # Orchestrates all three services
 ```
 
 See [docs/architecture.md](docs/architecture.md) for detailed architecture and data flow.

@@ -48,7 +48,10 @@ def run(args: argparse.Namespace) -> None:
 
     import uvicorn
 
-    os.environ["ANOMALY_CHECKPOINT_DIR"] = str(args.checkpoint_dir.resolve())
+    # Respect ANOMALY_CHECKPOINT_DIR if already set (e.g. by Docker).
+    # Only override when the user explicitly passes --checkpoint-dir.
+    if args.checkpoint_dir != DEFAULT_CHECKPOINT_DIR or "ANOMALY_CHECKPOINT_DIR" not in os.environ:
+        os.environ["ANOMALY_CHECKPOINT_DIR"] = str(args.checkpoint_dir.resolve())
 
     logger.info(
         "Starting inference server on http://%s:%d (checkpoints: %s)",

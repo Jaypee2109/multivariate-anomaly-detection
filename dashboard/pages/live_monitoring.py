@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 import dash
 import dash_bootstrap_components as dbc
@@ -464,7 +465,7 @@ def toggle_playback(
         ws_config = {
             "action": "connect",
             "config": {
-                "api_host": "localhost:8000",
+                "api_host": os.environ.get("ANOMALY_WS_HOST", "localhost:8000"),
                 "dataset_path": rel_path,
                 "models": models or None,
                 "chunk_size": speed,

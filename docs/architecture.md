@@ -19,7 +19,11 @@ Transformer/
 │   ├── api_client.py       # HTTP client for the inference API
 │   ├── datasets.py         # Dataset registry for the dashboard
 │   ├── mlflow_loader.py    # MLflow data loader
+│   ├── assets/             # Static assets (CSS, JS)
+│   │   └── websocket.js    # Clientside WebSocket manager for live monitoring
 │   └── pages/              # Dashboard pages (home, data, model, live)
+├── Dockerfile              # Multi-stage build (api / dashboard / mlflow targets)
+├── docker-compose.yml      # Orchestrates all three services
 ├── mlflow.db               # SQLite backend for MLflow (git-ignored)
 ├── docs/                   # Project documentation
 └── src/
@@ -142,13 +146,13 @@ download (kagglehub) -> load (CSV walk) -> preprocess (datetime + z-score) -> sa
 
 ### `api/` — Inference Server
 
-FastAPI-based REST API for real-time anomaly detection.
+FastAPI-based REST + WebSocket API for real-time anomaly detection.
 
-- `inference_server.py`: FastAPI app with `/models`, `/predict`, `/model/{name}/config`, `/health` endpoints
+- `inference_server.py`: FastAPI app with REST endpoints (`/health`, `/models`, `/detect`, `/detect/dashboard`, `/detect/csv`) and a WebSocket endpoint (`/ws/stream`) for chunked streaming
 - `model_manager.py`: Loads and manages model instances, handles checkpoint discovery
 - `schemas.py`: Pydantic request/response schemas
 
-The server loads trained model checkpoints on startup and exposes them for inference. Launched via `python -m time_series_transformer serve`.
+The server loads trained model checkpoints on startup and exposes them for inference. The `/ws/stream` WebSocket endpoint supports server-side dataset loading, batch inference, and chunked delivery with pause/resume/reset/speed controls. Launched via `python -m time_series_transformer serve`.
 
 ### `benchmark/` — Benchmark Framework
 
@@ -163,16 +167,17 @@ New models are added via `register_model("name", factory_fn)` — no core code c
 
 ### `dashboard/` — Interactive Dashboard
 
-Plotly Dash multi-page application for data exploration and live monitoring. Communicates with the inference API via `api_client.py`.
+Plotly Dash multi-page application for data exploration and live monitoring. Communicates with the inference server via HTTP (`api_client.py`) and WebSocket (`assets/websocket.js`).
 
-- `app.py`: Main Dash app with sidebar navigation
+- `app.py`: Main Dash app with navbar navigation
 - `api_client.py`: HTTP client wrapping inference API calls
 - `datasets.py`: Dataset registry (paths + metadata for the UI)
 - `mlflow_loader.py`: Loads MLflow experiment data for comparison
+- `assets/websocket.js`: Clientside JavaScript managing WebSocket lifecycle and JS-to-Dash buffer drain for Live Monitoring
 - `pages/home.py`: System overview, model status, dataset stats
 - `pages/data_analysis.py`: Interactive time series exploration
 - `pages/model_analysis.py`: Model config comparison + MLflow results
-- `pages/live_monitoring.py`: Real-time streaming anomaly detection
+- `pages/live_monitoring.py`: Real-time streaming anomaly detection via WebSocket
 
 ## Data Flow
 
@@ -218,10 +223,27 @@ Kaggle ──download──> data/raw/
 
   Model checkpoints ──> ModelManager (serve)
                              │
-                        FastAPI endpoints
+                    FastAPI REST + WebSocket
                              │
-                        Dashboard (Dash)
-                        └── api_client.py ──> /predict, /models
+                     ┌───────┴────────┐
+                     │                │
+              REST endpoints     /ws/stream
+           /detect, /models    (chunked streaming)
+                     │                │
+                Dashboard (Dash) ─────┘
+                ├── api_client.py (HTTP)
+                └── websocket.js  (WS)
+
+─── Docker path ───
+
+  docker compose up
+        │
+  ┌─────┼──────────┐
+  api   dashboard   mlflow
+  :8000 :8050       :5000
+  │       │
+  └── Docker DNS ──┘
+      (dashboard → api)
 ```
 
 ## Configuration Precedence
