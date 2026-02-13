@@ -59,6 +59,7 @@ examples:
   %(prog)s data                           Download & preprocess all datasets
   %(prog)s train --mlflow                 Train baselines with MLflow tracking
   %(prog)s train --labels L --labels-key K --mlflow   Train with ground-truth eval
+  %(prog)s benchmark --config configs/benchmark_nab.yaml   Benchmark on NAB datasets
   %(prog)s eda --csv path/to/data.csv     Basic EDA on a time series
   %(prog)s eda --anomalies path/to/artifacts.csv   Visualize anomalies
   %(prog)s info --data path/to/data.csv   Inspect a dataset
@@ -87,10 +88,11 @@ examples:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Register command modules
-    from time_series_transformer.cli import dashboard, data, eda, info, serve, train
+    from time_series_transformer.cli import benchmark, dashboard, data, eda, info, serve, train
 
     data.register(subparsers)
     train.register(subparsers)
+    benchmark.register(subparsers)
     eda.register(subparsers)
     info.register(subparsers)
     serve.register(subparsers)
@@ -134,8 +136,10 @@ examples:
         log_check_results(results)
 
     # Setup MLflow only when actually needed
-    needs_mlflow = (args.command == "train" and args.mlflow) or (
-        args.command == "info" and args.run_id is not None
+    needs_mlflow = (
+        (args.command == "train" and args.mlflow)
+        or (args.command == "benchmark" and args.mlflow)
+        or (args.command == "info" and args.run_id is not None)
     )
     if needs_mlflow:
         _setup_mlflow_tracking()
@@ -144,6 +148,8 @@ examples:
         data.run(args)
     elif args.command == "train":
         train.run(args)
+    elif args.command == "benchmark":
+        benchmark.run(args)
     elif args.command == "eda":
         eda.run(args)
     elif args.command == "info":

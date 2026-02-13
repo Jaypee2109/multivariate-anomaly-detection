@@ -11,7 +11,15 @@ Transformer/
 │   ├── raw/                # Downloaded Kaggle datasets (git-ignored)
 │   ├── processed/          # Preprocessed CSVs (git-ignored)
 │   └── labels/             # Ground-truth label files (e.g. NAB JSON)
-├── artifacts/              # Pipeline outputs: anomaly CSVs (git-ignored)
+├── artifacts/              # Pipeline outputs: anomaly CSVs, benchmark results (git-ignored)
+├── configs/                # YAML benchmark configs
+│   └── benchmark_nab.yaml  # NAB realKnownCause datasets
+├── dashboard/              # Plotly Dash interactive dashboard
+│   ├── app.py              # Main Dash app with multi-page routing
+│   ├── api_client.py       # HTTP client for the inference API
+│   ├── datasets.py         # Dataset registry for the dashboard
+│   ├── mlflow_loader.py    # MLflow data loader
+│   └── pages/              # Dashboard pages (home, data, model, live)
 ├── mlflow.db               # SQLite backend for MLflow (git-ignored)
 ├── docs/                   # Project documentation
 └── src/
@@ -25,8 +33,10 @@ Transformer/
     │   ├── cli/                   # Subcommand-based CLI
     │   ├── data_pipeline/         # Download, load, preprocess, save
     │   ├── models/baseline/       # Anomaly detector implementations
+    │   ├── api/                   # FastAPI inference server
+    │   ├── benchmark/             # Model registry + benchmark runner
     │   ├── analysis/              # EDA and visualization
-    │   ├── utils/                 # I/O helpers (anomaly_io)
+    │   ├── utils/                 # I/O, startup checks, data validation
     │   └── scripts/               # Legacy standalone entry points
     ├── scratch_transformer/       # Partner WIP: NLP transformer experiments
     └── scratch_time_series_transformer/  # Partner WIP: time-series transformer prototype
@@ -63,13 +73,16 @@ DATA_DIR     = PROJECT_ROOT / "data"
 Pattern: each module exposes `register(subparsers)` + `run(args)`.
 `cli/main.py` wires them into a single `argparse` parser.
 
-| Command  | Module       | Purpose                                    |
-|----------|--------------|--------------------------------------------|
-| `data`   | `cli/data`   | Download and preprocess Kaggle datasets    |
-| `train`  | `cli/train`  | Train baselines, optional MLflow + eval    |
-| `eda`    | `cli/eda`    | EDA on raw CSV or anomaly artifacts        |
-| `info`   | `cli/info`   | Inspect dataset or MLflow run              |
-| `mlflow` | `cli/main`   | Launch MLflow UI (inline, small)           |
+| Command     | Module          | Purpose                                    |
+|-------------|-----------------|------------------------------------------  |
+| `data`      | `cli/data`      | Download and preprocess Kaggle datasets    |
+| `train`     | `cli/train`     | Train baselines, optional MLflow + eval    |
+| `benchmark` | `cli/benchmark` | Evaluate models across multiple datasets   |
+| `serve`     | `cli/serve`     | Start FastAPI inference server             |
+| `dashboard` | `cli/dashboard` | Start Plotly Dash interactive dashboard    |
+| `eda`       | `cli/eda`       | EDA on raw CSV or anomaly artifacts        |
+| `info`      | `cli/info`      | Inspect dataset or MLflow run              |
+| `mlflow`    | `cli/main`      | Launch MLflow UI (inline, small)           |
 
 ### `models/baseline/` — Anomaly Detectors
 
@@ -127,6 +140,40 @@ download (kagglehub) -> load (CSV walk) -> preprocess (datetime + z-score) -> sa
 4. Iterates models: fit, predict, score, evaluate, optionally log to MLflow
 5. Saves combined anomaly artifacts CSV
 
+### `api/` — Inference Server
+
+FastAPI-based REST API for real-time anomaly detection.
+
+- `inference_server.py`: FastAPI app with `/models`, `/predict`, `/model/{name}/config`, `/health` endpoints
+- `model_manager.py`: Loads and manages model instances, handles checkpoint discovery
+- `schemas.py`: Pydantic request/response schemas
+
+The server loads trained model checkpoints on startup and exposes them for inference. Launched via `python -m time_series_transformer serve`.
+
+### `benchmark/` — Benchmark Framework
+
+Systematic evaluation of models across multiple datasets.
+
+- `dataset_spec.py`: `DatasetSpec` dataclass (name, csv_path, optional labels)
+- `registry.py`: Model factory registry — `register_model(name, factory)`, `get_factory(name)`, `list_models()`. Auto-registers built-in models (arima, isolation_forest, lstm, rolling_zscore)
+- `runner.py`: `BenchmarkRunner` — iterates models x datasets, collects metrics with error-tolerant execution
+- `results.py`: `BenchmarkResult` dataclass + `ResultsCollector` (DataFrame export, CSV, console table)
+
+New models are added via `register_model("name", factory_fn)` — no core code changes needed. Dataset lists are defined in YAML config files under `configs/`.
+
+### `dashboard/` — Interactive Dashboard
+
+Plotly Dash multi-page application for data exploration and live monitoring. Communicates with the inference API via `api_client.py`.
+
+- `app.py`: Main Dash app with sidebar navigation
+- `api_client.py`: HTTP client wrapping inference API calls
+- `datasets.py`: Dataset registry (paths + metadata for the UI)
+- `mlflow_loader.py`: Loads MLflow experiment data for comparison
+- `pages/home.py`: System overview, model status, dataset stats
+- `pages/data_analysis.py`: Interactive time series exploration
+- `pages/model_analysis.py`: Model config comparison + MLflow results
+- `pages/live_monitoring.py`: Real-time streaming anomaly detection
+
 ## Data Flow
 
 ```
@@ -151,9 +198,30 @@ Kaggle ──download──> data/raw/
                               │
                      summarize_anomalies()
                               │
-                              v
-                  artifacts/anomalies/*.csv
-                  MLflow (metrics, params, tags)
+                       ┌──────┴──────┐
+                       v             v
+           artifacts/anomalies/   MLflow (metrics,
+                *.csv             params, tags)
+
+─── Benchmark path ───
+
+  configs/*.yaml ──> BenchmarkRunner
+                        │
+                   datasets × models
+                        │
+                  _run_single() per pair
+                        │
+                        v
+              artifacts/benchmark/results.csv
+
+─── Inference path ───
+
+  Model checkpoints ──> ModelManager (serve)
+                             │
+                        FastAPI endpoints
+                             │
+                        Dashboard (Dash)
+                        └── api_client.py ──> /predict, /models
 ```
 
 ## Configuration Precedence

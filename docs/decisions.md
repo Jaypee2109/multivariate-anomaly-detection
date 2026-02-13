@@ -148,3 +148,76 @@ Significant architectural and design decisions, recorded in chronological order.
 
 - Both metric sets printed and logged to MLflow
 - Enables fairer comparison between models with different temporal characteristics
+
+---
+
+## D8: FastAPI inference server
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** Need a way to serve trained models for real-time anomaly detection, both for the dashboard demo and potential production use.
+
+**Decision:** FastAPI REST API (`api/`) with a `ModelManager` that discovers and loads model checkpoints on startup. Endpoints: `/models`, `/predict`, `/model/{name}/config`, `/health`.
+
+**Alternatives considered:**
+
+- Flask — less modern, no built-in async, no auto-generated OpenAPI docs
+- gRPC — better for internal services but harder to demo and integrate with a web dashboard
+- Gradio/Streamlit — combines UI + serving but too opinionated for our needs
+
+**Consequences:**
+
+- `fastapi` + `uvicorn` added as dependencies
+- `api/` package with `inference_server.py`, `model_manager.py`, `schemas.py`
+- CLI command: `python -m time_series_transformer serve`
+- Dashboard communicates with the API over HTTP
+
+---
+
+## D9: Plotly Dash interactive dashboard
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** Need a visual demo for the project presentation: data exploration, model comparison, and live anomaly detection.
+
+**Decision:** Multi-page Plotly Dash app (`dashboard/`) with four pages: Home, Data Analysis, Model Analysis, Live Monitoring. Communicates with the inference server via `api_client.py`.
+
+**Alternatives considered:**
+
+- Streamlit — simpler but limited layout control, no true multi-page routing
+- Grafana — great for monitoring but requires separate data source setup, overkill for a demo
+- Custom React frontend — too much development effort for a research project
+
+**Consequences:**
+
+- `dash`, `dash-bootstrap-components` added as dependencies
+- `dashboard/` directory (outside `src/`) with its own `app.py` entry point
+- CLI command: `python -m time_series_transformer dashboard`
+- Requires the inference server to be running for model-related features
+
+---
+
+## D10: Benchmark framework with model registry
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** Needed systematic, reproducible evaluation of multiple models across multiple datasets. The existing `baseline_pipeline.py` only supports a single dataset per run.
+
+**Decision:** A `benchmark/` package with a model factory registry and a YAML-driven dataset configuration. `BenchmarkRunner` iterates models x datasets, collects metrics into `ResultsCollector`, and exports a comparison CSV.
+
+**Alternatives considered:**
+
+- Extend `baseline_pipeline.py` — would bloat an already long module, harder to add new models
+- Hardcoded dataset flags (`--nab-all`) — too rigid, doesn't scale to new datasets
+- Hydra/OmegaConf for config — heavier dependency than needed for dataset lists
+
+**Consequences:**
+
+- `benchmark/` package with `registry.py`, `runner.py`, `results.py`, `dataset_spec.py`
+- YAML config files in `configs/` (e.g. `benchmark_nab.yaml`)
+- New models added via `register_model("name", factory)` — zero changes to core code
+- CLI command: `python -m time_series_transformer benchmark --config configs/benchmark_nab.yaml`
+- Error-tolerant: one failing model/dataset doesn't halt the entire benchmark

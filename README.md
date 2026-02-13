@@ -41,6 +41,15 @@ python -m time_series_transformer train \
     --labels-key realKnownCause/nyc_taxi.csv \
     --mlflow
 
+# Benchmark all models on multiple datasets
+python -m time_series_transformer benchmark --config configs/benchmark_nab.yaml
+
+# Start inference API server
+python -m time_series_transformer serve
+
+# Start interactive dashboard (requires running API server)
+python -m time_series_transformer dashboard
+
 # Exploratory data analysis
 python -m time_series_transformer eda --csv data/raw/nab/realKnownCause/realKnownCause/nyc_taxi.csv
 python -m time_series_transformer eda --anomalies
@@ -57,13 +66,16 @@ python -m time_series_transformer mlflow
 
 All commands are run via `python -m time_series_transformer <command>`.
 
-| Command  | Description                                | Key flags                                  |
-|----------|--------------------------------------------|--------------------------------------------|
-| `data`   | Download and preprocess Kaggle datasets    | `--dataset {nab,smd_onmiad,nasa_smap_msl}` |
-| `train`  | Train baseline anomaly detectors           | `--csv`, `--labels`, `--labels-key`, `--mlflow` |
-| `eda`    | Exploratory data analysis / anomaly viz    | `--csv` or `--anomalies`, `--no-save-html` |
-| `info`   | Inspect dataset CSV or MLflow run          | `--data` or `--run-id`, `-v`               |
-| `mlflow` | Launch MLflow UI                           | `--port`, `--host`                         |
+| Command     | Description                                | Key flags                                       |
+|-------------|--------------------------------------------|-------------------------------------------------|
+| `data`      | Download and preprocess Kaggle datasets    | `--dataset {nab,smd_onmiad,nasa_smap_msl}`      |
+| `train`     | Train baseline anomaly detectors           | `--csv`, `--labels`, `--labels-key`, `--mlflow`  |
+| `benchmark` | Evaluate models across multiple datasets   | `--config YAML`, `--csv`, `--model`, `--mlflow`  |
+| `serve`     | Start FastAPI inference server             | `--host`, `--port`, `--reload`                   |
+| `dashboard` | Start interactive Plotly Dash dashboard    | `--host`, `--port`, `--debug`                    |
+| `eda`       | Exploratory data analysis / anomaly viz    | `--csv` or `--anomalies`, `--no-save-html`       |
+| `info`      | Inspect dataset CSV or MLflow run          | `--data` or `--run-id`, `-v`                     |
+| `mlflow`    | Launch MLflow UI                           | `--port`, `--host`                               |
 
 Run `python -m time_series_transformer <command> --help` for full usage.
 
@@ -115,6 +127,69 @@ A transformer-based anomaly detector is being developed by a project partner. Pr
 
 Both are printed to stdout and logged to MLflow when `--mlflow` is used.
 
+## Benchmark Framework
+
+The `benchmark` command runs registered models across multiple datasets and collects comparison metrics. Datasets are defined in YAML config files:
+
+```yaml
+# configs/benchmark_nab.yaml
+datasets:
+  - name: NAB_nyc_taxi
+    csv: data/raw/nab/realKnownCause/realKnownCause/nyc_taxi.csv
+    labels: data/labels/nab/realKnownCause.json
+    labels_key: realKnownCause/nyc_taxi.csv
+```
+
+```bash
+# Run benchmark
+python -m time_series_transformer benchmark --config configs/benchmark_nab.yaml
+
+# Filter to specific models
+python -m time_series_transformer benchmark --config configs/benchmark_nab.yaml --model arima --model lstm
+
+# List available models
+python -m time_series_transformer benchmark --list-models
+```
+
+Results are saved to `artifacts/benchmark/results.csv` and printed as a comparison table. New models can be added to the registry without modifying core code.
+
+## Inference Server
+
+A FastAPI REST API for real-time anomaly detection:
+
+```bash
+python -m time_series_transformer serve          # default: localhost:8000
+python -m time_series_transformer serve --port 9000
+```
+
+Key endpoints:
+
+| Endpoint              | Method | Description                          |
+|-----------------------|--------|--------------------------------------|
+| `/models`             | GET    | List loaded models and their status  |
+| `/predict`            | POST   | Run anomaly detection on input data  |
+| `/model/{name}/config`| GET    | Get model configuration              |
+| `/health`             | GET    | Health check                         |
+
+## Dashboard
+
+An interactive Plotly Dash dashboard for exploring data, models, and live monitoring:
+
+```bash
+# Start the API server first
+python -m time_series_transformer serve
+
+# Then start the dashboard
+python -m time_series_transformer dashboard      # default: localhost:8050
+```
+
+Pages:
+
+- **Home** — System overview, loaded models, quick dataset stats
+- **Data Analysis** — Interactive time series exploration with zoom/pan
+- **Model Analysis** — Compare model configs and MLflow experiment results
+- **Live Monitoring** — Stream data through models and watch anomaly detection in real time
+
 ## Experiment Tracking
 
 MLflow stores runs in a local SQLite database (`mlflow.db`). Each model gets its own top-level run with:
@@ -135,8 +210,10 @@ src/
 │   ├── cli/                        # Subcommand-based CLI
 │   ├── data_pipeline/              # Download, load, preprocess, save
 │   ├── models/baseline/            # Anomaly detector implementations
+│   ├── api/                        # FastAPI inference server
+│   ├── benchmark/                  # Model registry + benchmark runner
 │   ├── analysis/                   # EDA and visualization
-│   ├── utils/                      # I/O helpers
+│   ├── utils/                      # I/O, startup checks, data validation
 │   ├── config.py                   # Central configuration
 │   ├── baseline_pipeline.py        # Training orchestrator
 │   ├── evaluation.py               # Point + range metrics
@@ -144,6 +221,16 @@ src/
 │   └── split.py                    # Time-ordered train/test split
 ├── scratch_transformer/            # Partner WIP: NLP transformer experiments
 └── scratch_time_series_transformer/ # Partner WIP: time-series transformer prototype
+
+dashboard/                          # Plotly Dash interactive dashboard
+├── app.py                          # Main Dash app with multi-page routing
+├── api_client.py                   # HTTP client for the inference API
+├── datasets.py                     # Dataset registry for the dashboard
+├── mlflow_loader.py                # MLflow data loader
+└── pages/                          # Dashboard pages (home, data, model, live)
+
+configs/                            # YAML benchmark configs
+└── benchmark_nab.yaml              # NAB realKnownCause datasets
 ```
 
 See [docs/architecture.md](docs/architecture.md) for detailed architecture and data flow.
