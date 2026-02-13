@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Tuple, Optional, Dict
 
-import numpy as np
 import pandas as pd
 from sklearn.metrics import (
+    average_precision_score,
     precision_recall_fscore_support,
     roc_auc_score,
-    average_precision_score,
 )
 
 
@@ -17,14 +15,14 @@ class PointMetrics:
     precision: float
     recall: float
     f1: float
-    auc_roc: Optional[float] = None
-    auc_pr: Optional[float] = None
+    auc_roc: float | None = None
+    auc_pr: float | None = None
 
 
 def _align_series(
     y_true: pd.Series,
     y_pred: pd.Series,
-) -> Tuple[pd.Series, pd.Series]:
+) -> tuple[pd.Series, pd.Series]:
     """
     Align two Series on a common index (inner join).
     """
@@ -32,7 +30,7 @@ def _align_series(
     return y_true_aligned, y_pred_aligned
 
 
-def labels_to_ranges(labels: pd.Series) -> List[Tuple[pd.Timestamp, pd.Timestamp]]:
+def labels_to_ranges(labels: pd.Series) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
     """
     Convert a boolean / {0,1} Series (indexed by timestamp) into
     a list of contiguous anomaly ranges (start, end).
@@ -44,10 +42,10 @@ def labels_to_ranges(labels: pd.Series) -> List[Tuple[pd.Timestamp, pd.Timestamp
 
     labels_bool = labels.astype(bool)
 
-    ranges: List[Tuple[pd.Timestamp, pd.Timestamp]] = []
+    ranges: list[tuple[pd.Timestamp, pd.Timestamp]] = []
     in_range = False
-    start: Optional[pd.Timestamp] = None
-    prev_t: Optional[pd.Timestamp] = None
+    start: pd.Timestamp | None = None
+    prev_t: pd.Timestamp | None = None
 
     for t, v in labels_bool.items():
         if v and not in_range:
@@ -70,8 +68,8 @@ def labels_to_ranges(labels: pd.Series) -> List[Tuple[pd.Timestamp, pd.Timestamp
 
 
 def _ranges_overlap(
-    r1: Tuple[pd.Timestamp, pd.Timestamp],
-    r2: Tuple[pd.Timestamp, pd.Timestamp],
+    r1: tuple[pd.Timestamp, pd.Timestamp],
+    r2: tuple[pd.Timestamp, pd.Timestamp],
 ) -> bool:
     s1, e1 = r1
     s2, e2 = r2
@@ -81,7 +79,7 @@ def _ranges_overlap(
 def compute_point_metrics(
     y_true: pd.Series,
     y_pred: pd.Series,
-    scores: Optional[pd.Series] = None,
+    scores: pd.Series | None = None,
     pos_label: int | bool = 1,
 ) -> PointMetrics:
     """
@@ -196,15 +194,9 @@ def compute_range_f1_from_labels(
     fn_ranges = n_gt - tp_ranges
     fp_ranges = n_pred - sum(pred_hit)
 
-    precision = (
-        tp_ranges / (tp_ranges + fp_ranges) if (tp_ranges + fp_ranges) > 0 else 0.0
-    )
+    precision = tp_ranges / (tp_ranges + fp_ranges) if (tp_ranges + fp_ranges) > 0 else 0.0
     recall = tp_ranges / (tp_ranges + fn_ranges) if (tp_ranges + fn_ranges) > 0 else 0.0
-    f1 = (
-        2 * precision * recall / (precision + recall)
-        if (precision + recall) > 0
-        else 0.0
-    )
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
     return RangeMetrics(
         precision=float(precision),
@@ -221,13 +213,15 @@ def summarize_anomalies(
     y_test: pd.Series,  # actual values
     anomalies: pd.Series,  # predicted labels (bool / {0,1})
     scores: pd.Series,  # anomaly scores (higher = more anomalous)
-    y_true_labels: Optional[pd.Series] = None,  # ground-truth labels, same index
+    y_true_labels: pd.Series | None = None,  # ground-truth labels, same index
     top_n: int = 10,
-) -> None:
+) -> tuple[PointMetrics, RangeMetrics | None] | None:
     """
     Print basic summary, top-N anomalous points, and (optionally)
     point- and range-based evaluation metrics if ground-truth labels
     are provided.
+
+    Returns (PointMetrics, RangeMetrics) when labels are given, None otherwise.
     """
     assert (y_test.index == anomalies.index).all()
     assert (y_test.index == scores.index).all()
@@ -284,3 +278,7 @@ def summarize_anomalies(
         print(f"  tp_ranges: {rm.n_tp_ranges}")
 
     print()
+
+    if y_true_labels is not None:
+        return (pm, rm)
+    return None

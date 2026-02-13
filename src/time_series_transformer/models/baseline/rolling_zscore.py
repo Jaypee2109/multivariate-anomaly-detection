@@ -1,4 +1,6 @@
 import pandas as pd
+
+from time_series_transformer.exceptions import ModelNotFittedError
 from time_series_transformer.models.baseline.base import BaseAnomalyDetector
 
 
@@ -28,7 +30,7 @@ class RollingZScoreAnomalyDetector(BaseAnomalyDetector):
         history_ + y, then return the part corresponding to y.
         """
         if self.history_ is None:
-            raise RuntimeError("Detector not fitted. Call fit() first.")
+            raise ModelNotFittedError("Detector not fitted. Call fit() first.")
 
         combined = pd.concat([self.history_, y])
         rolling_mean = combined.rolling(

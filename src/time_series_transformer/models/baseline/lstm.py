@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -8,6 +10,10 @@ import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
+
+from time_series_transformer.exceptions import DataValidationError, ModelNotFittedError
+
+logger = logging.getLogger(__name__)
 
 
 class LSTMForecaster(nn.Module):
@@ -68,7 +74,7 @@ class LSTMForecastAnomalyDetector:
             self._device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
             if self.device.startswith("cuda") and not torch.cuda.is_available():
-                print("[LSTM] CUDA requested but not available, falling back to CPU.")
+                logger.warning("CUDA requested but not available, falling back to CPU.")
                 self._device = "cpu"
             else:
                 self._device = self.device
@@ -94,7 +100,7 @@ class LSTMForecastAnomalyDetector:
         """
         T = self.lookback
         if len(arr) <= T:
-            raise ValueError("Series too short for given lookback.")
+            raise DataValidationError("Series too short for given lookback.")
         xs, ys = [], []
         for i in range(len(arr) - T):
             xs.append(arr[i : i + T])
@@ -149,7 +155,7 @@ class LSTMForecastAnomalyDetector:
         Returns a Series aligned to y.index with NaN for the first `lookback` points.
         """
         if not self._trained or self.model is None:
-            raise RuntimeError("Call fit() before decision_function().")
+            raise ModelNotFittedError("Call fit() before decision_function().")
 
         arr = self._standardize(y)
         X, y_true = self._make_windows(arr)
@@ -186,3 +192,51 @@ class LSTMForecastAnomalyDetector:
         anom = scores >= thr
         anom = anom.fillna(False)
         return anom
+
+    # ------- checkpointing -------
+
+    def save_checkpoint(self, path: str | Path) -> None:
+        """Save model weights and normalization stats to *path*."""
+        if not self._trained or self.model is None:
+            raise ModelNotFittedError("Cannot save checkpoint: model not trained.")
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                "state_dict": self.model.state_dict(),
+                "mean": self.mean_,
+                "std": self.std_,
+                "hyperparams": {
+                    "lookback": self.lookback,
+                    "hidden_size": self.hidden_size,
+                    "num_layers": self.num_layers,
+                    "dropout": self.dropout,
+                    "batch_size": self.batch_size,
+                    "lr": self.lr,
+                    "epochs": self.epochs,
+                    "error_quantile": self.error_quantile,
+                },
+            },
+            path,
+        )
+        logger.info("Saved LSTM checkpoint to %s", path)
+
+    @classmethod
+    def load_checkpoint(cls, path: str | Path) -> LSTMForecastAnomalyDetector:
+        """Reconstruct a trained detector from a checkpoint file."""
+        path = Path(path)
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+        hp = ckpt["hyperparams"]
+        detector = cls(**hp)
+        detector.mean_ = ckpt["mean"]
+        detector.std_ = ckpt["std"]
+        detector.model = LSTMForecaster(
+            input_size=1,
+            hidden_size=hp["hidden_size"],
+            num_layers=hp["num_layers"],
+            dropout=hp["dropout"],
+        ).to(detector._device)
+        detector.model.load_state_dict(ckpt["state_dict"])
+        detector._trained = True
+        logger.info("Loaded LSTM checkpoint from %s", path)
+        return detector

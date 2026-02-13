@@ -1,0 +1,324 @@
+/* ======================================================================
+   Anomaly Detection Dashboard — Dark Theme
+   ====================================================================== */
+
+/* --- Dash 4.x component CSS variable overrides (dark theme) --- */
+:root {
+    --Dash-Fill-Inverse-Strong: #1a1a1a;
+    --Dash-Fill-Interactive-Strong: #636efa;
+    --Dash-Fill-Interactive-Weak: rgba(99, 110, 250, 0.08);
+    --Dash-Fill-Primary-Hover: rgba(255, 255, 255, 0.04);
+    --Dash-Fill-Primary-Active: rgba(255, 255, 255, 0.08);
+    --Dash-Fill-Disabled: #333333;
+    --Dash-Stroke-Strong: #444444;
+    --Dash-Stroke-Weak: #333333;
+    --Dash-Text-Strong: #ffffff;
+    --Dash-Text-Weak: #aaaaaa;
+    --Dash-Text-Primary: #ffffff;
+    --Dash-Text-Disabled: #666666;
+    --Dash-Shading-Strong: rgba(255, 255, 255, 0.15);
+    --Dash-Shading-Weak: rgba(255, 255, 255, 0.08);
+}
+
+body {
+    background-color: #000000;
+    color: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* --- Navbar --- */
+.navbar-with-border {
+    border-bottom: 1px solid #333333;
+}
+
+.nav-page-link {
+    color: #ffffff !important;
+    margin-left: 12px;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 0.9rem;
+    transition: background-color 0.2s;
+}
+
+.nav-page-link:hover {
+    background-color: #333333;
+}
+
+.nav-page-link.active {
+    background-color: #424242 !important;
+    border: 1px solid #ffffff;
+}
+
+/* --- Page containers --- */
+.page-div {
+    background-color: #000000;
+    color: #ffffff;
+}
+
+.page-div-hero {
+    background-color: #000000;
+    color: #ffffff;
+    min-height: calc(100vh - 56px);
+}
+
+/* --- Cards --- */
+.card-1 {
+    background-color: #232323;
+    color: #ffffff;
+    width: 75%;
+    margin: 0 auto;
+}
+
+.card-2 {
+    background-color: #424242;
+    color: #ffffff;
+    height: 100%;
+}
+
+.card-dark {
+    background-color: #1a1a1a;
+    border: 1px solid #333333;
+    color: #ffffff;
+}
+
+/* --- Status badges --- */
+.status-online {
+    color: #00e676;
+    font-weight: 600;
+}
+
+.status-warning {
+    color: #ffc107;
+    font-weight: 600;
+}
+
+.status-offline {
+    color: #ff5252;
+    font-weight: 600;
+}
+
+/* --- Tabs --- */
+.tab-container {
+    background-color: transparent !important;
+}
+
+.tab {
+    background-color: #111111 !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+
+.tab:hover {
+    background-color: #222222 !important;
+    color: #ffffff !important;
+    border-top: 3px solid #636efa !important;
+}
+
+.tab--selected {
+    background-color: #111111 !important;
+    color: #ffffff !important;
+    border-top: 3px solid #636efa !important;
+}
+
+.diagramm-tab-left {
+    color: #ffffff !important;
+    border-top-left-radius: 3px;
+    border-top: 3px solid transparent;
+    background-color: #111111 !important;
+    border-bottom: none !important;
+    border-left: none !important;
+    border-right: none !important;
+}
+
+.diagramm-tab-right {
+    color: #ffffff !important;
+    border-top-right-radius: 3px;
+    border-top: 3px solid transparent;
+    background-color: #111111 !important;
+    border-bottom: none !important;
+    border-left: none !important;
+    border-right: none !important;
+}
+
+.diagramm-tab-left:hover,
+.diagramm-tab-right:hover {
+    color: #ffffff !important;
+    background-color: #222222 !important;
+    border-top: 3px solid #636efa !important;
+}
+
+.selected-diagramm-tab {
+    color: #ffffff !important;
+    background-color: #111111 !important;
+    border-top: 3px solid #636efa !important;
+    border-bottom: none !important;
+    border-left: none !important;
+    border-right: none !important;
+}
+
+/* --- Scrollbar --- */
+.dark-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #444444 #111111;
+}
+
+.dark-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+
+.dark-scroll::-webkit-scrollbar-track {
+    background: #111111;
+}
+
+.dark-scroll::-webkit-scrollbar-thumb {
+    background-color: #444444;
+    border-radius: 4px;
+}
+
+/* --- Dropdowns (Dash 4.x dcc.Dropdown dark override) --- */
+.dash-dropdown {
+    background-color: #1a1a1a !important;
+    border: 1px solid #444444 !important;
+    border-radius: 6px !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-trigger {
+    background-color: #1a1a1a !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-value,
+.dash-dropdown-placeholder {
+    color: #ffffff !important;
+}
+
+.dash-dropdown-value-item {
+    color: #ffffff !important;
+}
+
+.dash-dropdown-search {
+    background-color: transparent !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-search::placeholder {
+    color: #888888 !important;
+}
+
+.dash-dropdown-content {
+    background-color: #1a1a1a !important;
+    border: 1px solid #444444 !important;
+}
+
+.dash-dropdown-options {
+    background-color: #1a1a1a !important;
+}
+
+.dash-dropdown-option {
+    background-color: #1a1a1a !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-option:hover,
+.dash-dropdown-option[data-highlighted] {
+    background-color: #333333 !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-option[data-selected] {
+    background-color: #424242 !important;
+    color: #ffffff !important;
+}
+
+.dash-dropdown-clear,
+.dash-dropdown-trigger-icon {
+    color: #aaaaaa !important;
+}
+
+.dash-dropdown-search-icon {
+    color: #aaaaaa !important;
+}
+
+.dash-dropdown-wrapper {
+    background-color: #1a1a1a !important;
+}
+
+/* --- Tooltips --- */
+.stat-tooltip .tooltip-inner {
+    background-color: #333333;
+    color: #ffffff;
+    text-align: left;
+    max-width: 320px;
+    font-size: 0.82rem;
+    padding: 8px 12px;
+}
+
+.stat-tooltip .tooltip-arrow::before {
+    border-top-color: #333333 !important;
+}
+
+/* --- Switches --- */
+.form-check-input:checked {
+    background-color: #636efa !important;
+    border-color: #636efa !important;
+}
+
+/* --- Config Table --- */
+.config-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.config-table-th {
+    background-color: #1a1a1a;
+    color: #ffffff;
+    padding: 8px 12px;
+    border-bottom: 2px solid #444444;
+    text-align: left;
+    font-weight: 600;
+}
+
+.config-table-td {
+    background-color: transparent;
+    color: #cccccc;
+    padding: 6px 12px;
+    border-bottom: 1px solid #333333;
+}
+
+.config-table tr:hover .config-table-td {
+    background-color: #1a1a1a;
+}
+
+/* --- Model Checklist --- */
+.model-checklist-wrapper {
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+}
+
+.model-checklist {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.model-checklist label {
+    display: inline-flex !important;
+    align-items: center;
+    color: #ffffff !important;
+    margin-right: 16px;
+    cursor: pointer;
+}
+
+.model-checklist input[type="checkbox"] {
+    accent-color: #636efa;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+/* --- Utility --- */
+.text-muted-light {
+    color: #aaaaaa !important;
+}

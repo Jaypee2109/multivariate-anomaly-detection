@@ -1,0 +1,38 @@
+# Benchmark config — NAB realKnownCause datasets
+# Usage: python -m time_series_transformer benchmark --config configs/benchmark_nab.yaml
+
+datasets:
+  - name: NAB_nyc_taxi
+    csv: data/raw/nab/realKnownCause/realKnownCause/nyc_taxi.csv
+    labels: data/labels/nab/realKnownCause.json
+    labels_key: realKnownCause/nyc_taxi.csv
+
+  - name: NAB_ambient_temp
+    csv: data/raw/nab/realKnownCause/realKnownCause/ambient_temperature_system_failure.csv
+    labels: data/labels/nab/realKnownCause.json
+    labels_key: realKnownCause/ambient_temperature_system_failure.csv
+
+  - name: NAB_machine_temp
+    csv: data/raw/nab/realKnownCause/realKnownCause/machine_temperature_system_failure.csv
+    labels: data/labels/nab/realKnownCause.json
+    labels_key: realKnownCause/machine_temperature_system_failure.csv
+
+  - name: NAB_ec2_request_latency
+    csv: data/raw/nab/realKnownCause/realKnownCause/ec2_request_latency_system_failure.csv
+    labels: data/labels/nab/realKnownCause.json
+    labels_key: realKnownCause/ec2_request_latency_system_failure.csv
+
+  - name: NAB_cpu_util
+    csv: data/raw/nab/realKnownCause/realKnownCause/cpu_utilization_asg_misconfiguration.csv
+    labels: data/labels/nab/realKnownCause.json
+    labels_key: realKnownCause/cpu_utilization_asg_misconfiguration.csv
+
+  - name: NAB_rogue_key_hold
+    csv: data/raw/nab/realKnownCause/realKnownCause/rogue_agent_key_hold.csv
+    labels: data/labels/nab/realKnownCause.json
+    labels_key: realKnownCause/rogue_agent_key_hold.csv
+
+  - name: NAB_rogue_key_updown
+    csv: data/raw/nab/realKnownCause/realKnownCause/rogue_agent_key_updown.csv
+    labels: data/labels/nab/realKnownCause.json
+    labels_key: realKnownCause/rogue_agent_key_updown.csv

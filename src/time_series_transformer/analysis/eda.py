@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import logging
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Optional, Tuple, Dict
 
-import pandas as pd
 import holoviews as hv
+import pandas as pd
 from holoviews import opts
 
 from time_series_transformer.data_pipeline.preprocessing import load_csv_to_df
-from time_series_transformer.utils.anomaly_io import load_anomaly_flags_from_artifacts
+
+logger = logging.getLogger(__name__)
 
 hv.extension("bokeh")
 
@@ -48,7 +50,7 @@ def time_range_info(df: pd.DataFrame, timestamp_col: str = "timestamp") -> None:
     print("Time diff:  ", diff)
 
 
-def _infer_value_column(df: pd.DataFrame, value_col: Optional[str]) -> str:
+def _infer_value_column(df: pd.DataFrame, value_col: str | None) -> str:
     """
     If value_col is None, pick the first numeric column as value column.
     """
@@ -66,7 +68,7 @@ def _infer_value_column(df: pd.DataFrame, value_col: Optional[str]) -> str:
         )
 
     inferred = numeric_cols[0]
-    print(f"[EDA] No value_col specified, using first numeric column: '{inferred}'")
+    logger.info("No value_col specified, using first numeric column: '%s'", inferred)
     return inferred
 
 
@@ -78,7 +80,7 @@ def _infer_value_column(df: pd.DataFrame, value_col: Optional[str]) -> str:
 def make_resampled_curves(
     df: pd.DataFrame,
     timestamp_col: str = "timestamp",
-    value_col: Optional[str] = None,
+    value_col: str | None = None,
     freqs: Iterable[str] = ("h", "d", "W"),
 ) -> hv.Layout:
     """
@@ -132,10 +134,10 @@ def make_resampled_curves(
 def run_basic_eda_from_csv(
     csv_path: str | Path,
     timestamp_col: str = "timestamp",
-    value_col: Optional[str] = None,
+    value_col: str | None = None,
     freqs: Iterable[str] = ("h", "d", "W"),
     save_html: bool = True,
-) -> Tuple[pd.DataFrame, hv.Layout]:
+) -> tuple[pd.DataFrame, hv.Layout]:
     """
     Basic EDA:
     - load CSV
@@ -160,7 +162,7 @@ def run_basic_eda_from_csv(
         save_path = Path("reports") / f"{csv_path.stem}_basic_eda.html"
         save_path.parent.mkdir(parents=True, exist_ok=True)
         hv.save(layout, save_path, fmt="html")
-        print(f"\n[EDA] Saved basic EDA HTML visualization to: {save_path}")
+        logger.info("Saved basic EDA HTML visualization to: %s", save_path)
 
     return df, layout
 
@@ -193,7 +195,7 @@ def run_anomaly_eda_from_artifacts(
     # 2) Base curve of the value
     base_curve = hv.Curve(df[value_col], label="Value").opts(
         opts.Curve(
-            title=f"Demand with anomalies (test period)",
+            title="Demand with anomalies (test period)",
             xlabel="Time",
             ylabel="Demand",
             width=900,
@@ -260,6 +262,6 @@ def run_anomaly_eda_from_artifacts(
         save_path = Path("reports") / html_name
         save_path.parent.mkdir(parents=True, exist_ok=True)
         hv.save(overlay, save_path, fmt="html")
-        print(f"[EDA] Saved anomaly EDA HTML visualization to: {save_path}")
+        logger.info("Saved anomaly EDA HTML visualization to: %s", save_path)
 
     return overlay

@@ -1,0 +1,44 @@
+services:
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./artifacts:/app/artifacts
+    environment:
+      - DATA_DIR=/app/data
+      - ARTIFACTS_DIR=/app/artifacts
+      - ANOMALY_CHECKPOINT_DIR=/app/artifacts/checkpoints
+
+  dashboard:
+    build:
+      context: .
+      target: dashboard
+    ports:
+      - "8050:8050"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATA_DIR=/app/data
+      - ANOMALY_API_URL=http://api:8000
+      - ANOMALY_WS_HOST=api:8000
+    depends_on:
+      - api
+
+  mlflow:
+    build:
+      context: .
+      target: mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/app/mlruns
+      - mlflow-db:/app/db
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:///app/db/mlflow.db
+
+volumes:
+  mlflow-db:

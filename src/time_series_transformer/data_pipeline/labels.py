@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import List
-
 import json
+from pathlib import Path
+
 import pandas as pd
 
 
 def load_label_times(
     json_path: str | Path,
     dataset_key: str = "realKnownCause/nyc_taxi.csv",
-) -> List[pd.Timestamp]:
+) -> list[pd.Timestamp]:
     """
     Load NAB label timestamps for a given dataset from the labels JSON.
 
@@ -40,7 +39,7 @@ def load_label_times(
 
 def make_point_labels_from_times(
     df: pd.DataFrame,
-    label_times: List[pd.Timestamp],
+    label_times: list[pd.Timestamp],
     timestamp_col: str = "timestamp",
 ) -> pd.Series:
     """

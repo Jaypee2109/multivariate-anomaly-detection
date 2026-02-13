@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
-from typing import Dict
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def save_anomaly_artifacts(
     y_test: pd.Series,
-    scores_dict: Dict[str, pd.Series],
-    anomalies_dict: Dict[str, pd.Series],
+    scores_dict: dict[str, pd.Series],
+    anomalies_dict: dict[str, pd.Series],
     out_path: str | Path,
 ) -> None:
     """
@@ -31,13 +33,13 @@ def save_anomaly_artifacts(
         df[f"{det_name}_is_anomaly"] = flags.astype(int)
 
     df.to_csv(out_path, index_label="timestamp")
-    print(f"[Baseline] Saved anomaly artifacts to: {out_path}")
+    logger.info("Saved anomaly artifacts to: %s", out_path)
 
 
 def load_anomaly_flags_from_artifacts(
     artifacts_path: str | Path,
-    display_name_map: Dict[str, str] | None = None,
-) -> Dict[str, pd.Series]:
+    display_name_map: dict[str, str] | None = None,
+) -> dict[str, pd.Series]:
     """
     Load anomaly flags from the artifacts CSV and return a dict:
         { display_name: pd.Series[bool] }
@@ -64,14 +66,14 @@ def load_anomaly_flags_from_artifacts(
     df = pd.read_csv(artifacts_path, parse_dates=["timestamp"])
     df = df.set_index("timestamp")
 
-    anomalies_dict: Dict[str, pd.Series] = {}
+    anomalies_dict: dict[str, pd.Series] = {}
 
     # find all *_is_anomaly columns
     suffix = "_is_anomaly"
     anomaly_cols = [c for c in df.columns if c.endswith(suffix)]
 
     if not anomaly_cols:
-        print(f"[Anomaly IO] No '*{suffix}' columns found in {artifacts_path}")
+        logger.warning("No '*%s' columns found in %s", suffix, artifacts_path)
         return anomalies_dict
 
     for col in anomaly_cols:

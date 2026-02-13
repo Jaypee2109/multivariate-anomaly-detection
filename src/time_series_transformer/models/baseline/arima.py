@@ -1,5 +1,7 @@
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMA
+
+from time_series_transformer.exceptions import ModelNotFittedError
 from time_series_transformer.models.baseline.base import BaseAnomalyDetector
 
 
@@ -24,7 +26,7 @@ class ARIMAResidualAnomalyDetector(BaseAnomalyDetector):
 
     def _residual_zscores(self, y: pd.Series) -> pd.Series:
         if self.model_fit_ is None or self.resid_std_ is None:
-            raise RuntimeError("Detector not fitted. Call fit() first.")
+            raise ModelNotFittedError("Detector not fitted. Call fit() first.")
 
         # Forecast forward for the length of y
         preds = self.model_fit_.forecast(steps=len(y))

@@ -1,12 +1,16 @@
 # preprocessing.py
 from __future__ import annotations
 
+import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Dict, Iterable, Optional
 from pathlib import Path
 
 import pandas as pd
 
+from time_series_transformer.exceptions import DataNotFoundError, DataValidationError
+
+logger = logging.getLogger(__name__)
 
 # ---------- Helper functions ----------
 
@@ -34,9 +38,7 @@ def to_datetime_index(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def standard_scale(
-    df: pd.DataFrame, exclude: Iterable[str] | None = None
-) -> pd.DataFrame:
+def standard_scale(df: pd.DataFrame, exclude: Iterable[str] | None = None) -> pd.DataFrame:
 
     if exclude is None:
         exclude = []
@@ -48,7 +50,7 @@ def standard_scale(
     for col in cols_to_scale:
         mean = df[col].mean()
         std = df[col].std()
-        print("Mean, std ", mean, std)
+        logger.debug("col=%s mean=%.4f std=%.4f", col, mean, std)
         if std == 0 or pd.isna(std):
             # Konstante Spalte -> einfach auf 0 setzen
             df[col] = 0.0
@@ -60,18 +62,18 @@ def standard_scale(
 
 def load_csv_to_df(
     path: str | Path,
-    parse_dates: Optional[Iterable[str]] = None,
-    index_col: Optional[str] = None,
+    parse_dates: Iterable[str] | None = None,
+    index_col: str | None = None,
     **read_csv_kwargs,
 ) -> pd.DataFrame:
 
     path = Path(path)
 
     if not path.exists():
-        raise FileNotFoundError(f"File not found: {path}")
+        raise DataNotFoundError(f"File not found: {path}")
 
     if path.suffix.lower() != ".csv":
-        raise ValueError(f"Expected a .csv file, got: {path.suffix} ({path})")
+        raise DataValidationError(f"Expected a .csv file, got: {path.suffix} ({path})")
 
     df = pd.read_csv(path, parse_dates=parse_dates, **read_csv_kwargs)
 
@@ -90,7 +92,6 @@ def load_csv_to_df(
 
 @dataclass
 class PreprocessingConfig:
-
     scale_numeric: bool = True
     use_datetime_index: bool = True
     # Spaltennamen, die nicht skaliert werden sollen (Labels etc.)
@@ -110,19 +111,19 @@ def preprocess_dataframe(df: pd.DataFrame, config: PreprocessingConfig) -> pd.Da
 
 def preprocess_dataset_dict(
     dataset_name: str,
-    data: Dict[str, pd.DataFrame],
+    data: dict[str, pd.DataFrame],
     config: PreprocessingConfig | None = None,
-) -> Dict[str, pd.DataFrame]:
+) -> dict[str, pd.DataFrame]:
 
     if config is None:
         # Default-Konfig – kannst du pro Dataset anpassen
         config = PreprocessingConfig()
 
-    print(f"[preprocess_dataset_dict] Preprocessing on Dataset '{dataset_name}' ...")
-    out: Dict[str, pd.DataFrame] = {}
+    logger.info("Preprocessing dataset '%s' ...", dataset_name)
+    out: dict[str, pd.DataFrame] = {}
 
     for rel_path, df in data.items():
-        print(f"[preprocess_dataset_dict]  -> {rel_path}")
+        logger.info("  -> %s", rel_path)
         out[rel_path] = preprocess_dataframe(df, config)
 
     return out
@@ -130,7 +131,6 @@ def preprocess_dataset_dict(
 
 if __name__ == "__main__":
     # Test
-    import numpy as np
 
     df_test = pd.DataFrame(
         {
