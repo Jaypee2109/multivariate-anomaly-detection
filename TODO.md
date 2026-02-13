@@ -18,7 +18,7 @@
 ## Inference / MLOps
 
 - [x] FastAPI inference server (REST)
-- [ ] WebSocket / SSE streaming endpoint
+- [x] WebSocket streaming endpoint (`/ws/stream`) — server-side dataset loading + batch inference, chunked delivery with pause/resume/reset/speed controls
 - [ ] Dockerfile + docker-compose
 
 ## Dashboard / Demo
@@ -26,7 +26,7 @@
 - [x] Home page
 - [x] Data Analysis page
 - [x] Model Analysis page
-- [x] Live Monitoring (simulated streaming via polling + cache)
+- [x] Live Monitoring (WebSocket streaming from inference server)
 
 ## Report
 

@@ -7,7 +7,7 @@ import logging
 import dash
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
-from dash import Input, Output, State, callback, ctx, dcc, html
+from dash import ClientsideFunction, Input, Output, State, callback, clientside_callback, ctx, dcc, html
 from datasets import discover_categories, discover_datasets, load_dataset
 from plotly.subplots import make_subplots
 
@@ -226,6 +226,11 @@ layout = html.Div(
         dcc.Store(id="lm-dataset-store", storage_type="memory"),
         dcc.Store(id="lm-results-store", storage_type="memory"),
         dcc.Store(id="lm-state-store", storage_type="memory", data={"index": 0}),
+        # WebSocket stores
+        dcc.Store(id="ws-trigger", storage_type="memory"),
+        dcc.Store(id="ws-buffer", storage_type="memory",
+                  data={"chunks": [], "status": "disconnected", "init": None, "error": None}),
+        html.Div(id="ws-dummy", style={"display": "none"}),
         # Interval timer (disabled by default)
         dcc.Interval(id="lm-interval", interval=1000, disabled=True, n_intervals=0),
         # Slow interval to refresh model list / API status
@@ -244,6 +249,26 @@ layout = html.Div(
             )
         ),
     ]
+)
+
+
+# ---------------------------------------------------------------------------
+# Clientside callbacks (WebSocket lifecycle — see assets/websocket.js)
+# ---------------------------------------------------------------------------
+
+clientside_callback(
+    ClientsideFunction(namespace="ws", function_name="connect"),
+    Output("ws-dummy", "data"),
+    Input("ws-trigger", "data"),
+    prevent_initial_call=True,
+)
+
+clientside_callback(
+    ClientsideFunction(namespace="ws", function_name="drain"),
+    Output("ws-buffer", "data"),
+    Input("lm-interval", "n_intervals"),
+    State("ws-buffer", "data"),
+    prevent_initial_call=True,
 )
 
 
@@ -274,14 +299,16 @@ def update_dataset_options(category: str | None) -> tuple[list, str | None]:
     Output("lm-dataset-store", "data"),
     Output("lm-results-store", "data", allow_duplicate=True),
     Output("lm-state-store", "data", allow_duplicate=True),
+    Output("ws-trigger", "data", allow_duplicate=True),
+    Output("lm-interval", "disabled", allow_duplicate=True),
     Input("lm-dataset", "value"),
     prevent_initial_call=True,
 )
 def load_dataset_into_store(
     rel_path: str | None,
-) -> tuple[dict | None, None, dict]:
-    """Load the selected dataset and reset simulation state + cache."""
-    _reset = (None, None, {"index": 0})
+) -> tuple[dict | None, None, dict, dict, bool]:
+    """Load the selected dataset, disconnect WebSocket, and reset state."""
+    _reset = (None, None, {"index": 0, "consumed": 0}, {"action": "disconnect"}, True)
     if not rel_path:
         return _reset
     try:
@@ -301,13 +328,14 @@ def load_dataset_into_store(
 
     return (
         {
-            "timestamps": df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist(),
-            "values": df["value"].tolist(),
+            "rel_path": rel_path,
             "name": rel_path.split("/")[-1],
             "total": len(df),
         },
         None,
-        {"index": 0},
+        {"index": 0, "consumed": 0},
+        {"action": "disconnect"},
+        True,
     )
 
 
@@ -402,10 +430,14 @@ def populate_models(
     Output("lm-interval", "disabled"),
     Output("lm-state-store", "data", allow_duplicate=True),
     Output("lm-results-store", "data", allow_duplicate=True),
+    Output("ws-trigger", "data", allow_duplicate=True),
     Input("lm-play-btn", "n_clicks"),
     Input("lm-pause-btn", "n_clicks"),
     Input("lm-reset-btn", "n_clicks"),
     State("lm-state-store", "data"),
+    State("lm-dataset-store", "data"),
+    State("lm-models", "value"),
+    State("lm-speed", "value"),
     prevent_initial_call=True,
 )
 def toggle_playback(
@@ -413,19 +445,41 @@ def toggle_playback(
     _pause: int | None,
     _reset: int | None,
     state: dict | None,
-) -> tuple[bool, dict, dict | None]:
-    """Handle play/pause/reset button clicks."""
+    dataset: dict | None,
+    selected_models: list[str] | None,
+    speed: int | None,
+) -> tuple[bool, dict, dict | None, dict | None]:
+    """Handle play/pause/reset — controls WebSocket connection."""
+    NO = dash.no_update
     triggered = ctx.triggered_id
     if not isinstance(state, dict):
-        state = {"index": 0}
+        state = {"index": 0, "consumed": 0}
+    speed = speed or 5
 
     if triggered == "lm-play-btn":
-        return False, state, dash.no_update
+        rel_path = dataset.get("rel_path") if isinstance(dataset, dict) else None
+        if not rel_path:
+            return True, state, NO, NO
+        models = [m for m in (selected_models or []) if m and m != "__none__"]
+        ws_config = {
+            "action": "connect",
+            "config": {
+                "api_host": "localhost:8000",
+                "dataset_path": rel_path,
+                "models": models or None,
+                "chunk_size": speed,
+                "interval_ms": 1000,
+            },
+        }
+        return False, {"index": 0, "consumed": 0}, None, ws_config
+
     if triggered == "lm-pause-btn":
-        return True, state, dash.no_update
+        return NO, state, NO, {"action": "pause"}
+
     if triggered == "lm-reset-btn":
-        return True, {"index": 0}, None  # clear cache on reset
-    return True, state, dash.no_update
+        return True, {"index": 0, "consumed": 0}, None, {"action": "disconnect"}
+
+    return True, state, NO, NO
 
 
 @callback(
@@ -439,7 +493,7 @@ def toggle_playback(
     Output("lm-api-status", "children"),
     Output("lm-interval", "disabled", allow_duplicate=True),
     Input("lm-interval", "n_intervals"),
-    State("lm-dataset-store", "data"),
+    State("ws-buffer", "data"),
     State("lm-state-store", "data"),
     State("lm-results-store", "data"),
     State("lm-models", "value"),
@@ -448,204 +502,158 @@ def toggle_playback(
 )
 def tick(
     _n: int,
-    dataset: dict | None,
+    ws_buffer: dict | None,
     state: dict | None,
     cache: dict | None,
     selected_models: list[str],
     speed: int,
 ) -> tuple:
-    """Core tick: advance index and stream from cached results.
+    """Core tick: consume WebSocket chunks and update the chart.
 
-    On the first tick (or when models/data change) a single API call
-    pre-computes results for the full dataset and returns a complete
-    ``figure``.  Subsequent ticks return only the **delta** via
-    ``extendData`` — Plotly.js appends natively with zero re-render.
-
-    Future live sources only need to push new points into
-    ``lm-dataset-store``; the ``valid_to`` watermark will trigger a
-    re-compute automatically for the new data.
+    The clientside ``drain`` callback populates ``ws-buffer`` with
+    chunks streamed from the server.  This callback reads new chunks,
+    accumulates them into a cache, and feeds the chart via
+    ``extendData`` (or a full figure on first data).
     """
-    from api_client import get_client
-
     NO = dash.no_update
-    state = state or {"index": 0}
+    state = state or {"index": 0, "consumed": 0}
     cache = cache or {}
+    ws_buffer = ws_buffer or {"chunks": [], "status": "disconnected", "init": None, "error": None}
+
     idx = state.get("index", 0)
-    speed = speed or 5  # fallback if dropdown has no value
+    consumed = state.get("consumed", 0)
+    ws_status = ws_buffer.get("status", "disconnected")
+    init_msg = ws_buffer.get("init")
+    all_chunks = ws_buffer.get("chunks", [])
+    ws_error = ws_buffer.get("error")
 
     def _err(msg: str, *, api: bool | None = None, pause: bool = True) -> tuple:
-        """Return a safe error tuple that satisfies all outputs."""
         return (
-            _empty_fig(msg),
-            NO,
-            state,
-            NO,
+            _empty_fig(msg), NO, state, NO,
             [html.Span(msg, className="text-muted-light")],
-            "",
-            "",
-            _api_badge(api),
-            pause,
+            "", "", _api_badge(api), pause,
         )
 
-    # No dataset loaded
-    if not dataset:
-        return _err("Select a dataset and press Play")
+    # Handle error state
+    if ws_status == "error":
+        detail = ws_error or "Unknown error"
+        return _err(f"WebSocket error: {detail}", api=False)
 
-    # Validate dataset store keys
-    if not isinstance(dataset, dict):
-        logger.error("lm-dataset-store is not a dict: %s", type(dataset))
-        return _err("Invalid dataset — please re-select")
+    # Nothing to do yet (disconnected, no data)
+    if ws_status == "disconnected" and not all_chunks:
+        return (NO, NO, state, NO, NO, NO, NO, NO, NO)
 
-    total = dataset.get("total", 0)
-    timestamps = dataset.get("timestamps", [])
-    values = dataset.get("values", [])
+    # Get unconsumed chunks
+    new_chunks = all_chunks[consumed:]
 
-    if not timestamps or not values or total <= 0:
-        return _err("Dataset is empty — please select another")
+    if not new_chunks:
+        # No new data this tick
+        if ws_status == "done":
+            return (NO, NO, state, NO, NO, NO, NO, NO, True)
+        return (NO, NO, state, NO, NO, NO, NO, NO, NO)
 
-    if len(timestamps) != len(values) or len(timestamps) != total:
-        logger.error(
-            "Dataset length mismatch: ts=%d vals=%d total=%d",
-            len(timestamps), len(values), total,
-        )
-        return _err("Dataset corrupted — please re-select")
+    new_consumed = len(all_chunks)
 
-    # Filter out placeholder "__none__" and invalid model slugs
-    selected_models = [
-        m for m in (selected_models or []) if m and m != "__none__"
-    ]
+    # Filter models
+    selected = [m for m in (selected_models or []) if m and m != "__none__"]
+    color_map = {m: _PALETTE[i % len(_PALETTE)] for i, m in enumerate(sorted(selected))}
 
-    # Advance index
-    new_idx = min(idx + speed, total)
-    if new_idx <= 0:
-        return _err("Press Play to start", pause=True)
+    # Merge new chunks into delta arrays
+    delta_ts: list[str] = []
+    delta_vals: list[float] = []
+    delta_models: dict[str, dict] = {}
+    total = 0
 
-    finished = new_idx >= total
-    new_state = {"index": new_idx}
+    for chunk in new_chunks:
+        delta_ts.extend(chunk.get("timestamps", []))
+        delta_vals.extend(chunk.get("values", []))
+        total = chunk.get("total", total)
+        for slug, mdata in (chunk.get("models") or {}).items():
+            if slug not in delta_models:
+                delta_models[slug] = {"scores": [], "anomalies": []}
+            delta_models[slug]["scores"].extend(mdata.get("scores", []))
+            delta_models[slug]["anomalies"].extend(mdata.get("anomalies", []))
 
-    # ------------------------------------------------------------------
-    # No models selected → raw-data-only playback (API may be offline)
-    # ------------------------------------------------------------------
-    if not selected_models:
-        fig = _build_chart_no_api(timestamps[:new_idx], values[:new_idx])
-        return (
-            fig,
-            NO,
-            new_state,
-            NO,
-            [html.Span("No models selected — showing raw data only.", className="text-muted-light")],
-            f"{new_idx:,} / {total:,}",
-            "",
-            _api_badge(None),
-            finished,
-        )
-
-    # Build color map
-    color_map = {m: _PALETTE[i % len(_PALETTE)] for i, m in enumerate(sorted(selected_models))}
+    new_idx = idx + len(delta_ts)
+    latency_ms = init_msg.get("latency_ms", 0) if init_msg else 0
+    finished = ws_status == "done" or new_idx >= total
 
     # ------------------------------------------------------------------
-    # Cache check — compute once, then stream
+    # First data → build accumulated cache + full figure
     # ------------------------------------------------------------------
-    models_key = "|".join(sorted(selected_models))
-    cache_hit = (
-        isinstance(cache, dict)
-        and cache.get("models_key") == models_key
-        and cache.get("valid_to", 0) >= total
-        and isinstance(cache.get("chart_data"), dict)
-    )
-
-    if not cache_hit:
-        # One-time inference on the full dataset
-        try:
-            client = get_client()
-            result = client.detect_dashboard(
-                timestamps,
-                values,
-                selected_models or None,
-            )
-        except Exception:
-            logger.warning("API call failed during tick", exc_info=True)
-            result = None
-
-        if result is None:
-            fig = _build_chart_no_api(timestamps[:new_idx], values[:new_idx])
-            return (
-                fig,
-                NO,
-                new_state,
-                NO,
-                [html.Span("API offline — showing raw data only", className="text-muted-light")],
-                f"{new_idx:,} / {total:,}",
-                "",
-                _api_badge(False),
-                finished,
-            )
-
-        # Validate API response structure
-        chart_data = result.get("chart_data")
-        if not isinstance(chart_data, dict):
-            logger.error("API returned invalid chart_data: %s", type(chart_data))
-            fig = _build_chart_no_api(timestamps[:new_idx], values[:new_idx])
-            return (
-                fig,
-                NO,
-                new_state,
-                NO,
-                [html.Span("API returned invalid data", className="text-muted-light")],
-                f"{new_idx:,} / {total:,}",
-                "",
-                _api_badge(True),
-                finished,
-            )
-
-        cache = {
-            "models_key": models_key,
-            "valid_to": total,
-            "chart_data": chart_data,
-            "latency_ms": result.get("latency_ms", 0),
+    if idx == 0:
+        acc_cache = {
+            "chart_data": {
+                "timestamps": delta_ts,
+                "values": delta_vals,
+                "models": delta_models,
+            },
+            "latency_ms": latency_ms,
         }
 
-        # Return full figure (init) — no extendData on first frame
+        if not selected:
+            fig = _build_chart_no_api(delta_ts, delta_vals)
+            return (
+                fig, NO,
+                {"index": new_idx, "consumed": new_consumed},
+                acc_cache,
+                [html.Span("No models selected — showing raw data only.", className="text-muted-light")],
+                f"{new_idx:,} / {total:,}", "", _api_badge(True), finished,
+            )
+
         try:
-            fig = _build_init_figure(cache, new_idx, selected_models, color_map)
+            fig = _build_init_figure(acc_cache, new_idx, selected, color_map)
         except Exception:
             logger.error("Failed to build init figure", exc_info=True)
-            fig = _build_chart_no_api(timestamps[:new_idx], values[:new_idx])
+            fig = _build_chart_no_api(delta_ts, delta_vals)
 
-        summary = _build_progressive_summary(cache, new_idx, color_map)
+        summary = _build_progressive_summary(acc_cache, new_idx, color_map)
         return (
-            fig,
-            NO,
-            new_state,
-            cache,
-            summary,
+            fig, NO,
+            {"index": new_idx, "consumed": new_consumed},
+            acc_cache, summary,
             f"{new_idx:,} / {total:,}",
-            f"Computed in {cache.get('latency_ms', 0):.0f}ms",
-            _api_badge(True),
-            finished,
+            f"Computed in {latency_ms:.0f}ms",
+            _api_badge(True), finished,
         )
 
     # ------------------------------------------------------------------
-    # Cache hit → stream only the delta via extendData
+    # Subsequent data → extend chart + accumulate cache
     # ------------------------------------------------------------------
-    try:
-        extend = _compute_extend_data(cache, idx, new_idx, selected_models)
-    except Exception:
-        logger.error("Failed to compute extend data", exc_info=True)
-        extend = None
+    # Build extendData directly from delta arrays
+    extend = _build_extend_from_delta(
+        delta_ts, delta_vals, delta_models, selected,
+    )
+
+    # Accumulate into cache for summary
+    if isinstance(cache, dict) and "chart_data" in cache:
+        cd = cache["chart_data"]
+        cd["timestamps"] = cd.get("timestamps", []) + delta_ts
+        cd["values"] = cd.get("values", []) + delta_vals
+        for slug, mdata in delta_models.items():
+            if slug not in cd.get("models", {}):
+                cd["models"][slug] = {"scores": [], "anomalies": []}
+            cd["models"][slug]["scores"].extend(mdata["scores"])
+            cd["models"][slug]["anomalies"].extend(mdata["anomalies"])
+    else:
+        cache = {
+            "chart_data": {
+                "timestamps": delta_ts,
+                "values": delta_vals,
+                "models": delta_models,
+            },
+            "latency_ms": latency_ms,
+        }
 
     summary = _build_progressive_summary(cache, new_idx, color_map)
 
     return (
-        NO,
-        extend,
-        new_state,
-        NO,
-        summary,
+        NO, extend,
+        {"index": new_idx, "consumed": new_consumed},
+        cache, summary,
         f"{new_idx:,} / {total:,}",
-        f"Computed in {cache.get('latency_ms', 0):.0f}ms",
-        _api_badge(True),
-        finished,
+        f"Computed in {latency_ms:.0f}ms",
+        _api_badge(True), finished,
     )
 
 
@@ -856,6 +864,53 @@ def _compute_extend_data(
     return [{"x": x_arrays, "y": y_arrays}, indices, CHART_WINDOW]
 
 
+def _build_extend_from_delta(
+    ts_delta: list[str],
+    vals_delta: list[float],
+    models_delta: dict[str, dict],
+    selected_models: list[str],
+) -> list | None:
+    """Build a Plotly ``extendData`` payload directly from WebSocket delta."""
+    if not ts_delta:
+        return None
+
+    n_delta = len(ts_delta)
+    x_arrays: list[list] = [ts_delta]  # trace 0: value line
+    y_arrays: list[list] = [vals_delta]
+    indices: list[int] = [0]
+
+    for i, model_slug in enumerate(sorted(selected_models)):
+        mdata = models_delta.get(model_slug)
+        if not isinstance(mdata, dict):
+            x_arrays.append([None] * n_delta)
+            y_arrays.append([None] * n_delta)
+            indices.append(1 + 2 * i)
+            x_arrays.append(ts_delta)
+            y_arrays.append([0] * n_delta)
+            indices.append(2 + 2 * i)
+            continue
+
+        scores = mdata.get("scores", [])
+        anomalies = mdata.get("anomalies", [])
+
+        if len(anomalies) < n_delta:
+            anomalies = anomalies + [False] * (n_delta - len(anomalies))
+        if len(scores) < n_delta:
+            scores = scores + [0] * (n_delta - len(scores))
+
+        mk_x = [t if a else None for t, a in zip(ts_delta, anomalies, strict=False)]
+        mk_y = [v if a else None for v, a in zip(vals_delta, anomalies, strict=False)]
+        x_arrays.append(mk_x)
+        y_arrays.append(mk_y)
+        indices.append(1 + 2 * i)
+
+        x_arrays.append(ts_delta)
+        y_arrays.append([s if s is not None else 0 for s in scores])
+        indices.append(2 + 2 * i)
+
+    return [{"x": x_arrays, "y": y_arrays}, indices, CHART_WINDOW]
+
+
 def _build_chart_no_api(timestamps: list[str], values: list[float]) -> go.Figure:
     """Build a chart showing only raw data (API offline)."""
     n = len(timestamps)
@@ -973,6 +1028,24 @@ def _stat_row(label: str, value: str) -> html.Div:
         ],
         className="mb-1",
     )
+
+
+@callback(
+    Output("ws-trigger", "data", allow_duplicate=True),
+    Input("lm-speed", "value"),
+    State("ws-buffer", "data"),
+    prevent_initial_call=True,
+)
+def update_ws_speed(
+    speed: int | None,
+    ws_buffer: dict | None,
+) -> dict | None:
+    """Send speed change to WebSocket server when dropdown changes."""
+    ws_buffer = ws_buffer or {}
+    if ws_buffer.get("status") not in ("streaming", "paused"):
+        return dash.no_update
+    speed = speed or 5
+    return {"action": "speed", "chunk_size": speed, "interval_ms": 1000}
 
 
 def _api_badge(online: bool | None) -> html.Span:

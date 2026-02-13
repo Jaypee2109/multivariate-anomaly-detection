@@ -9,7 +9,9 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import io
+import json
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -19,7 +21,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import pandas as pd
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from time_series_transformer.api.model_manager import MODEL_DISPLAY_NAMES, ModelManager
@@ -35,7 +37,7 @@ from time_series_transformer.api.schemas import (
     ModelsInfoResponse,
     SingleModelResult,
 )
-from time_series_transformer.config import ARTIFACTS_DIR
+from time_series_transformer.config import ARTIFACTS_DIR, RAW_DATA_DIR
 from time_series_transformer.exceptions import TransformerError
 
 logger = logging.getLogger(__name__)
@@ -71,7 +73,6 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -291,3 +292,184 @@ async def detect_from_csv(
         "filename": file.filename,
     }
     return DetectResponse(results=results, metadata=metadata)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket streaming
+# ---------------------------------------------------------------------------
+
+
+def _load_nab_dataset(rel_path: str) -> pd.DataFrame | None:
+    """Load a NAB CSV by its relative path under RAW_DATA_DIR/nab."""
+    csv_path = RAW_DATA_DIR / "nab" / rel_path
+    if not csv_path.exists():
+        return None
+    df = pd.read_csv(csv_path, parse_dates=["timestamp"])
+    if "timestamp" not in df.columns or "value" not in df.columns:
+        return None
+    return df.sort_values("timestamp")
+
+
+@app.websocket("/ws/stream")
+async def websocket_stream(ws: WebSocket) -> None:
+    """Stream anomaly detection results over WebSocket.
+
+    Protocol:
+    1. Client connects and sends JSON config
+    2. Server loads dataset, runs batch inference, sends "init" message
+    3. Server streams "chunk" messages at configured rate
+    4. Client can send control messages (pause/resume/reset/speed/close)
+    5. Server sends "done" when dataset is exhausted
+    """
+    await ws.accept()
+
+    try:
+        # Step 1: Receive configuration
+        raw_config = await asyncio.wait_for(ws.receive_text(), timeout=10.0)
+        config = json.loads(raw_config)
+
+        dataset_path = config.get("dataset_path", "")
+        model_slugs = config.get("models") or None
+        chunk_size = max(1, min(100, config.get("chunk_size", 5)))
+        interval_ms = max(100, min(10000, config.get("interval_ms", 1000)))
+
+        # Step 2: Load dataset server-side
+        df = _load_nab_dataset(dataset_path)
+        if df is None:
+            await ws.send_json({"type": "error", "detail": f"Dataset not found: {dataset_path}"})
+            await ws.close()
+            return
+
+        timestamps = df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
+        values = df["value"].tolist()
+        total = len(timestamps)
+
+        if total < 10:
+            await ws.send_json({"type": "error", "detail": f"Dataset too small: {total} points"})
+            await ws.close()
+            return
+
+        # Step 3: Resolve models and run batch inference
+        slugs = model_slugs or manager.loaded_model_names
+        if not slugs:
+            await ws.send_json({"type": "error", "detail": "No models loaded"})
+            await ws.close()
+            return
+
+        unknown = set(slugs) - set(manager.loaded_model_names)
+        if unknown:
+            await ws.send_json({
+                "type": "error",
+                "detail": f"Unknown models: {sorted(unknown)}. Available: {manager.loaded_model_names}",
+            })
+            await ws.close()
+            return
+
+        y = _build_series(timestamps, values)
+
+        try:
+            raw_results = manager.detect(y, model_slugs=slugs)
+        except Exception as exc:
+            await ws.send_json({"type": "error", "detail": f"Inference failed: {exc}"})
+            await ws.close()
+            return
+
+        # Pre-compute full result arrays (same format as /detect/dashboard)
+        total_latency = 0.0
+        full_models: dict[str, dict] = {}
+        for slug, (anomalies, scores, latency) in raw_results.items():
+            total_latency += latency
+            sc_vals = scores.values[-total:]
+            an_vals = anomalies.values[-total:]
+            full_models[slug] = {
+                "scores": [float(s) if pd.notna(s) else None for s in sc_vals],
+                "anomalies": [bool(a) for a in an_vals],
+            }
+
+        # Send init message
+        await ws.send_json({
+            "type": "init",
+            "total": total,
+            "dataset_name": dataset_path.split("/")[-1],
+            "models_used": list(slugs),
+            "latency_ms": round(total_latency, 2),
+        })
+
+        # Step 4: Stream chunks
+        index = 0
+        paused = False
+
+        while index < total:
+            # Check for control messages (non-blocking)
+            try:
+                msg = await asyncio.wait_for(ws.receive_text(), timeout=0.01)
+                ctrl = json.loads(msg)
+                action = ctrl.get("action", "")
+
+                if action == "pause":
+                    paused = True
+                    await ws.send_json({"type": "paused", "index": index})
+                    continue
+                elif action == "resume":
+                    paused = False
+                    await ws.send_json({"type": "resumed", "index": index})
+                elif action == "reset":
+                    index = 0
+                    paused = False
+                    await ws.send_json({"type": "reset", "index": 0})
+                    continue
+                elif action == "speed":
+                    if ctrl.get("chunk_size") is not None:
+                        chunk_size = max(1, min(100, ctrl["chunk_size"]))
+                    if ctrl.get("interval_ms") is not None:
+                        interval_ms = max(100, min(10000, ctrl["interval_ms"]))
+                elif action == "close":
+                    await ws.close()
+                    return
+            except asyncio.TimeoutError:
+                pass  # No control message — continue streaming
+
+            if paused:
+                await asyncio.sleep(0.1)
+                continue
+
+            # Build and send chunk
+            end = min(index + chunk_size, total)
+            chunk_models: dict[str, dict] = {}
+            for slug, mdata in full_models.items():
+                chunk_models[slug] = {
+                    "scores": mdata["scores"][index:end],
+                    "anomalies": mdata["anomalies"][index:end],
+                }
+
+            await ws.send_json({
+                "type": "chunk",
+                "index": index,
+                "timestamps": timestamps[index:end],
+                "values": values[index:end],
+                "models": chunk_models,
+                "total": total,
+                "progress": round(end / total, 4),
+            })
+
+            index = end
+            await asyncio.sleep(interval_ms / 1000.0)
+
+        # Stream complete
+        await ws.send_json({"type": "done", "total": total})
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected")
+    except asyncio.TimeoutError:
+        logger.warning("WebSocket client did not send config within timeout")
+        try:
+            await ws.close(code=1008, reason="Config timeout")
+        except Exception:
+            pass
+    except Exception:
+        logger.exception("WebSocket error")
+        try:
+            await ws.send_json({"type": "error", "detail": "Internal server error"})
+            await ws.close(code=1011)
+        except Exception:
+            pass
