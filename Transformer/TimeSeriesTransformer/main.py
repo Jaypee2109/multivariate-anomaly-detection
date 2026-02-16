@@ -14,7 +14,7 @@ from transformer import (
 )
 
 # -------------------------------------------------
-# Setup for Apple Silicon
+# Device Setup
 # -------------------------------------------------
 torch.set_float32_matmul_precision("medium")
 DEVICE = torch.device(
@@ -117,7 +117,7 @@ def load_and_concat_datasets(data_dir, lag=12):
 
 
 # -------------------------
-# Autoregressive forecasting function
+# Autoregressive forecasting
 # -------------------------
 def forecast_autoregressive(model, init_window_vals, init_window_ts, steps=20, lag=12):
     """
