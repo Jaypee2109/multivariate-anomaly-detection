@@ -4,7 +4,7 @@ import pandas as pd
 
 from torch.utils.data import DataLoader
 
-from transformer import TransformerTimeSeriesWithLearnableTime2Vec
+from transformer import TransformerTimeSeriesWithLearnableTime2VecSinCos
 
 # -------------------------------------------------
 # Utilities (copied from training script)
@@ -69,7 +69,7 @@ class ElectricityWindowDataset(torch.utils.data.Dataset):
             torch.from_numpy(tf_y),
         )
 
-    def _time_features(self, ts, sid, target=False):
+    def _time_features(self, ts, target=False):
         ts = pd.to_datetime(ts)
         feats = np.stack(
             [
@@ -78,7 +78,6 @@ class ElectricityWindowDataset(torch.utils.data.Dataset):
                     (t.minute // 15) / 3,
                     t.weekday() / 6,
                     t.dayofyear / 365,
-                    sid / self.num_series,
                 ]
                 for t in ts
             ],
@@ -135,11 +134,8 @@ def forecast_autoregressive(
         minutes = np.array([(t.minute // 15) / 3 for t in ts[-lag:]], dtype=np.float32)
         wdays = np.array([t.weekday() / 6 for t in ts[-lag:]], dtype=np.float32)
         doy = np.array([t.dayofyear / 365 for t in ts[-lag:]], dtype=np.float32)
-        sid_feat = np.full_like(
-            hours, sid / len(vals), dtype=np.float32
-        )  # sid / num_series
 
-        tfx = np.stack([hours, minutes, wdays, doy, sid_feat], axis=-1)  # shape (lag,5)
+        tfx = np.stack([hours, minutes, wdays, doy], axis=-1)  # shape (lag,5)
         x = torch.tensor(vals[-lag:], device=device)[None, :, None]  # shape (1, lag, 1)
         tfx = torch.tensor(tfx, device=device)[None]  # shape (1, lag, 5)
 
@@ -150,7 +146,6 @@ def forecast_autoregressive(
                     (ts[-1].minute // 15) / 3,
                     ts[-1].weekday() / 6,
                     ts[-1].dayofyear / 365,
-                    sid / len(vals),
                     (step + 1) / steps,
                 ]
             ],
@@ -222,11 +217,11 @@ def main():
     NUM_HEADS = 12
     NUM_LAYERS = 6
     DIM_FEEDFORWARD = 1536
-    TFx_DIM = 5
-    TFy_DIM = 6
+    TFx_DIM = 4
+    TFy_DIM = 5
     LAG = 96
 
-    CHECKPOINT_PATH = "models/electricity_model_learnable_t2v_4_epochs_12_heads_6_layers_384_dim_1536_dim_feedforward_5_tfx_dim_6_tfy_dim_ddp_fixed"
+    CHECKPOINT_PATH = "models/electricity_model_learnable_t2v_1_epochs_12_heads_6_layers_384_dim_1536_dim_feedforward_4_tfx_dim_5_tfy_dim_ddp_fixed.pth"
 
     # --------------------
     # Load data
@@ -252,7 +247,7 @@ def main():
     # --------------------
     # Load model
     # --------------------
-    model = TransformerTimeSeriesWithLearnableTime2Vec(
+    model = TransformerTimeSeriesWithLearnableTime2VecSinCos(
         t2v_dim=16,
         model_dim=MODEL_DIM,
         num_heads=NUM_HEADS,

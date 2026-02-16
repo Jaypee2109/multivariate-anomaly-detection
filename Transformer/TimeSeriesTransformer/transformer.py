@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from learnableTime2Vec import LearnableTime2VecSinCos
+from learnableTime2Vec import LearnableTime2VecSinCos, LearnableTime2Vec
 from time2vec import Time2Vec
 
 
@@ -91,7 +91,7 @@ class TransformerTimeSeries(nn.Module):
         return out
 
 
-class TransformerTimeSeriesWithLearnableTime2Vec(nn.Module):
+class TransformerTimeSeriesWithLearnableTime2VecSinCos(nn.Module):
     def __init__(
         self,
         t2v_dim=16,
@@ -183,4 +183,81 @@ class TransformerTimeSeriesWithLearnableTime2Vec(nn.Module):
 
         # Decode
         out = self.decoder(attended.squeeze(1))  # (B, 1)
+        return out
+
+
+class TransformerTimeSeriesWithTime2Vec(nn.Module):
+    def __init__(
+        self,
+        t2v_dim=16,
+        model_dim=128,
+        num_heads=8,
+        num_layers=4,
+        dropout=0.1,
+        dim_feedforward=1024,
+        tfx_dim=4,
+        tfy_dim=5,
+    ):
+        super().__init__()
+
+        self.tfx_t2v = LearnableTime2Vec(in_dim=tfx_dim, out_dim=t2v_dim)
+        self.tfy_t2v = LearnableTime2Vec(in_dim=tfy_dim, out_dim=t2v_dim)
+
+        # Value + time2vec
+        self.input_proj = nn.Linear(1 + t2v_dim, model_dim)
+
+        self.tfy_proj = nn.Linear(t2v_dim, model_dim)
+
+        self.cross_attention = nn.MultiheadAttention(
+            embed_dim=model_dim,
+            num_heads=num_heads,
+            batch_first=True,
+        )
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=model_dim,
+            nhead=num_heads,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True,
+        )
+
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer, num_layers=num_layers
+        )
+
+        self.horizon_embed = nn.Embedding(512, model_dim)
+
+        self.decoder = nn.Sequential(
+            nn.Linear(model_dim, model_dim),
+            nn.ReLU(),
+            nn.Linear(model_dim, 1),
+        )
+
+    def forward(self, src, tfy):
+
+        B, seq_len, _ = src.shape
+
+        vals = src[..., :1]
+        tfx_raw = src[..., 1:]
+
+        # ---- Encoder ----
+        tfx_embed = self.tfx_t2v(tfx_raw)  # (B, seq_len, t2v_dim)
+
+        x = torch.cat([vals, tfx_embed], dim=-1)
+        x = self.input_proj(x)
+
+        mask = generate_causal_mask(seq_len).to(src.device)
+        x = self.transformer_encoder(x, mask=mask)
+
+        # ---- Decoder Query ----
+        tfy_embed = self.tfy_t2v(tfy)  # (B, t2v_dim)
+        tfy_proj = self.tfy_proj(tfy_embed).unsqueeze(1)
+
+        h = torch.zeros(B, dtype=torch.long, device=src.device)
+        tfy_proj = tfy_proj + self.horizon_embed(h).unsqueeze(1)
+
+        attended, _ = self.cross_attention(tfy_proj, x, x)
+
+        out = self.decoder(attended.squeeze(1))
         return out

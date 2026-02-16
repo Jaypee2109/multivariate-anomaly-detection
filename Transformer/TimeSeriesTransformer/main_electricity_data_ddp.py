@@ -114,8 +114,8 @@ class ElectricityWindowDataset(Dataset):
         y = self.values[t + self.lag, sid]
 
         ts = self.timestamps[t : t + self.lag]
-        tf_x = self._time_features(ts, sid)
-        tf_y = self._time_features([self.timestamps[t + self.lag]], sid, target=True)
+        tf_x = self._time_features(ts)
+        tf_y = self._time_features([self.timestamps[t + self.lag]], target=True)
 
         return (
             torch.from_numpy(x[:, None]),
@@ -124,7 +124,7 @@ class ElectricityWindowDataset(Dataset):
             torch.from_numpy(tf_y),
         )
 
-    def _time_features(self, ts, sid, target=False):
+    def _time_features(self, ts, target=False):
         ts = pd.to_datetime(ts)
         feats = np.stack(
             [
@@ -133,7 +133,6 @@ class ElectricityWindowDataset(Dataset):
                     (t.minute // 15) / 3,
                     t.weekday() / 6,
                     t.dayofyear / 365,
-                    sid / self.num_series,
                 ]
                 for t in ts
             ],
@@ -525,8 +524,8 @@ def main():
     NUM_LAYERS = 6
     EPOCHS = 1
     DIM_FEEDFORWARD = 1536
-    TFx_DIM = 5
-    TFyDIM = 6
+    TFx_DIM = 4
+    TFyDIM = 5
     AR_EVAL_EVERY = 2
 
     model = TransformerTimeSeriesWithLearnableTime2Vec(

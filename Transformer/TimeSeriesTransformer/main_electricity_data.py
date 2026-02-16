@@ -76,11 +76,11 @@ class ElectricityWindowDataset(Dataset):
         t_idx = idx // self.num_series
 
         x = self.series_data[t_idx : t_idx + self.lag, series_id][:, None]
-        y = self.series_data[t_idx + self.lag, series_id]
+        y = np.array([self.series_data[t_idx + self.lag, series_id]], dtype=np.float32)
 
         ts_window = self.timestamps[t_idx : t_idx + self.lag + 1]  # for TFx & TFy
-        TFx = self.build_time_features(ts_window[: self.lag], series_id)
-        TFy = self.build_time_features(ts_window[self.lag :], series_id, for_y=True)
+        TFx = self.build_time_features(ts_window[: self.lag])
+        TFy = self.build_time_features(ts_window[self.lag :], for_y=True)
         TFy = np.squeeze(TFy, axis=0)  # remove extra dimension
         return (
             torch.tensor(x, dtype=torch.float32),
@@ -89,14 +89,12 @@ class ElectricityWindowDataset(Dataset):
             torch.tensor(TFy, dtype=torch.float32),
         )
 
-    def build_time_features(self, ts, series_id, for_y=False):
+    def build_time_features(self, ts, for_y=False):
         hour = np.array([t.hour / 23.0 for t in ts], dtype=np.float32)
         quarter = np.array([(t.minute // 15) / 3.0 for t in ts], dtype=np.float32)
         weekday = np.array([t.weekday() / 6.0 for t in ts], dtype=np.float32)
         dayofyear = np.array([t.dayofyear / 365.0 for t in ts], dtype=np.float32)
-        sid = np.full(len(ts), series_id / self.num_series, dtype=np.float32)
-
-        tf = np.stack([hour, quarter, weekday, dayofyear, sid], axis=-1)
+        tf = np.stack([hour, quarter, weekday, dayofyear], axis=-1)
         if for_y:
             # Append lag scaling
             tf = np.concatenate([tf, np.array([[1.0 / self.lag]] * len(tf))], axis=-1)
@@ -106,7 +104,7 @@ class ElectricityWindowDataset(Dataset):
 # -------------------------------------------------
 # Window builder
 # -------------------------------------------------
-def build_windows_electricity(values, timestamps, lag, series_id, num_series):
+def build_windows_electricity(values, timestamps, lag):
     values = np.asarray(values, dtype=np.float32)
     timestamps = pd.to_datetime(timestamps)
 
@@ -118,9 +116,8 @@ def build_windows_electricity(values, timestamps, lag, series_id, num_series):
     quarter = np.array([(t.minute // 15) / 3.0 for t in timestamps], dtype=np.float32)
     weekday = np.array([t.weekday() / 6.0 for t in timestamps], dtype=np.float32)
     dayofyear = np.array([t.dayofyear / 365.0 for t in timestamps], dtype=np.float32)
-    sid = np.full(T, series_id / num_series, dtype=np.float32)
 
-    time_feats = np.stack([hour, quarter, weekday, dayofyear, sid], axis=-1)
+    time_feats = np.stack([hour, quarter, weekday, dayofyear], axis=-1)
 
     X, y, TFx, TFy = [], [], [], []
 
@@ -150,11 +147,10 @@ def forecast_autoregressive_electricity(
     model,
     init_vals,
     init_ts,
-    series_id,
-    num_series,
     steps,
     lag,
 ):
+
     model.eval()
     device = next(model.parameters()).device
 
@@ -170,9 +166,8 @@ def forecast_autoregressive_electricity(
         quarter = np.array([(t.minute // 15) / 3.0 for t in w_ts], dtype=np.float32)
         weekday = np.array([t.weekday() / 6.0 for t in w_ts], dtype=np.float32)
         dayofyear = np.array([t.dayofyear / 365.0 for t in w_ts], dtype=np.float32)
-        sid = np.full(lag, series_id / num_series, dtype=np.float32)
 
-        TFx = np.stack([hour, quarter, weekday, dayofyear, sid], axis=-1)
+        TFx = np.stack([hour, quarter, weekday, dayofyear], axis=-1)
 
         x = torch.tensor(w_vals)[None, :, None].to(device)
         tfx = torch.tensor(TFx)[None, :, :].to(device)
@@ -188,7 +183,6 @@ def forecast_autoregressive_electricity(
                     (next_ts.minute // 15) / 3.0,
                     next_ts.weekday() / 6.0,
                     next_ts.dayofyear / 365.0,
-                    series_id / num_series,
                     (k + 1) / steps,
                 ]
             ],
@@ -224,12 +218,12 @@ def select_ar_validation_windows(val_sets, max_windows=100):
     return ar
 
 
-def evaluate_ar_quick(model, ar_windows, num_series, horizons, lag):
+def evaluate_ar_quick(model, ar_windows, horizons, lag):
     metrics = {h: [] for h in horizons}
     with torch.no_grad():
         for vals, ts, true, sid in ar_windows:
             preds = forecast_autoregressive_electricity(
-                model, vals, ts, sid, num_series, max(horizons), lag
+                model, vals, ts, max(horizons), lag
             )
             for h in horizons:
                 metrics[h].append(np.mean(np.abs(np.array(preds[:h]) - true[:h])))
@@ -313,9 +307,7 @@ def train_model(
         # -----------------------
         ar_str = ""
         if epoch % ar_eval_every == 0 and ar_windows is not None:
-            ar_metrics = evaluate_ar_quick(
-                model, ar_windows, num_series, (1, 5, 10, 20), lag
-            )
+            ar_metrics = evaluate_ar_quick(model, ar_windows, (1, 5, 10, 20), lag)
             ar_str = " | " + " ".join(f"h{h}:{v:.3f}" for h, v in ar_metrics.items())
 
         print(
@@ -377,8 +369,6 @@ def evaluate_autoregressive(
                 model=model,
                 init_vals=init_vals,
                 init_ts=init_ts,
-                series_id=series_id,
-                num_series=num_series,
                 steps=max(horizons),
                 lag=lag,
             )
@@ -411,14 +401,14 @@ def evaluate_autoregressive(
 # -------------------------------------------------
 def main():
     LAG = 96
-    MODEL_DIM = 256
-    NUM_HEADS = 16
-    NUM_LAYERS = 12
+    MODEL_DIM = 128
+    NUM_HEADS = 8
+    NUM_LAYERS = 8
     EPOCHS = 5
     BATCH_SIZE = 64
     DIM_FEEDFORWARD = 1536
-    TFx_DIM = 5
-    TFyDIM = 6
+    TFx_DIM = 4
+    TFyDIM = 5
 
     df = pd.read_csv(
         el_path, sep=";", decimal=",", parse_dates=["timestamp"]
@@ -432,14 +422,14 @@ def main():
         train_dataset,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        num_workers=4,
+        num_workers=1,
         pin_memory=True,
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=2,
+        num_workers=1,
         pin_memory=True,
     )
 

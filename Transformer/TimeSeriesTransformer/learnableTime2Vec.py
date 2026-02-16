@@ -42,3 +42,26 @@ class LearnableTime2VecSinCos(nn.Module):
 
         # Concatenate linear + periodic
         return torch.cat([v0.unsqueeze(-1), vp], dim=-1)  # (..., 1 + 2*(out_dim-1))
+
+
+class LearnableTime2Vec(nn.Module):
+    """
+    Fully learnable Time2Vec with sin and cos components
+    Supports input shape:
+        - (B, in_dim)
+        - (B, seq_len, in_dim)
+    """
+
+    def __init__(self, in_dim=1, out_dim=16):
+        super().__init__()
+        self.w0 = nn.Parameter(torch.randn(in_dim))
+        self.b0 = nn.Parameter(torch.randn(1))
+
+        self.W = nn.Parameter(torch.randn(out_dim - 1, in_dim))
+        self.B = nn.Parameter(torch.randn(out_dim - 1))
+
+    def forward(self, t):
+        v0 = torch.matmul(t, self.w0) + self.b0
+        z = torch.einsum("...i,ki->...k", t, self.W) + self.B
+        vp = torch.sin(z)
+        return torch.cat([v0.unsqueeze(-1), vp], dim=-1)
