@@ -11,9 +11,9 @@ import numpy as np
 from transformer import TransformerTimeSeries
 
 
-# -------------------------------------------------------------------------
-# DEVICE SELECTION (CUDA > MPS > CPU)
-# -------------------------------------------------------------------------
+# -------------
+# Device Setup
+# -------------
 def get_device():
     if torch.cuda.is_available():
         return torch.device("cuda")
@@ -22,9 +22,9 @@ def get_device():
     return torch.device("cpu")
 
 
-# -------------------------------------------------------------------------
-# DATA LOADING
-# -------------------------------------------------------------------------
+# -------------
+# Data Loading
+# -------------
 def load_and_concat_datasets(data_dir, lag=12):
     X_train_list, y_train_list = [], []
     TFx_train_list, TFy_train_list = [], []
@@ -108,9 +108,9 @@ def build_windows(values, timestamps, lag):
     return X.float(), y.float(), TFx.float(), TFy.float()
 
 
-# -------------------------------------------------------------------------
-# AUTOREGRESSIVE FORECAST
-# -------------------------------------------------------------------------
+# ---------------------------
+# Autoregressive forecasting
+# ---------------------------
 def forecast_autoregressive(model, init_vals, init_ts, steps=20, lag=12):
     model.eval()
     device = next(model.parameters()).device
@@ -146,16 +146,13 @@ def forecast_autoregressive(model, init_vals, init_ts, steps=20, lag=12):
     return preds
 
 
-# -------------------------------------------------------------------------
-# TRAIN FUNCTION (Single process, multi-GPU via DataParallel)
-# -------------------------------------------------------------------------
+# -------------------
+# Training
+# -------------------
 def train_single_device(args):
     device = get_device()
     print(f"Using device: {device}")
 
-    # ----------------------
-    # LOAD DATA
-    # ----------------------
     (
         X_train,
         y_train,
@@ -186,9 +183,6 @@ def train_single_device(args):
         pin_memory=True,
     )
 
-    # ----------------------
-    # MODEL
-    # ----------------------
     model = TransformerTimeSeries(
         t2v_dim=32,
         model_dim=args["model_dim"],
@@ -215,9 +209,6 @@ def train_single_device(args):
 
     best_val = float("inf")
 
-    # ----------------------
-    # TRAIN LOOP
-    # ----------------------
     for epoch in range(args["epochs"]):
         model.train()
         for xb, yb, tfxb, tfyb in train_dl:
@@ -237,9 +228,6 @@ def train_single_device(args):
             optimizer.step()
             scheduler.step()
 
-        # ----------------------
-        # VALIDATION
-        # ----------------------
         model.eval()
         val_loss = 0.0
         count = 0
@@ -269,9 +257,6 @@ def train_single_device(args):
             print(f"Saved best model to {ckpt_path}")
 
 
-# -------------------------------------------------------------------------
-# ENTRY POINT
-# -------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
 
@@ -291,6 +276,3 @@ if __name__ == "__main__":
     args = vars(parser.parse_args())
 
     train_single_device(args)
-
-
-### 19437525

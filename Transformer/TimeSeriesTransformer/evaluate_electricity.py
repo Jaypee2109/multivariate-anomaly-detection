@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from transformer import TransformerTimeSeriesWithLearnableTime2VecSinCos
 
 # -------------------------------------------------
-# Utilities (copied from training script)
+# Utilities
 # -------------------------------------------------
 
 

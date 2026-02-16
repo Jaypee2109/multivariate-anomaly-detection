@@ -10,7 +10,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_sco
 from transformer import TransformerTimeSeriesWithLearnableTime2Vec
 
 # -------------------------------------------------
-# Device setup (CPU / MPS / CUDA)
+# Device setup
 # -------------------------------------------------
 torch.set_float32_matmul_precision("medium")
 
@@ -23,7 +23,7 @@ DEVICE = torch.device(
 print("Using device:", DEVICE)
 
 # -------------------------------------------------
-# Constants (change freely if needed)
+# Constants
 # -------------------------------------------------
 LAG = 90
 
@@ -40,7 +40,7 @@ MODEL_CHECKPOINT_PATH = "models/learnable_t2v_10_epochs_16_heads_8_layers_128_di
 
 
 # -------------------------------------------------
-# Data loading utilities (unchanged)
+# Data loading
 # -------------------------------------------------
 def build_windows(values, timestamps, lag):
     values = np.array(values, dtype=np.float32)
@@ -156,7 +156,7 @@ def load_and_concat_datasets(data_dir, lag):
 
 
 # -------------------------------------------------
-# Evaluation helpers (unchanged logic)
+# Evaluation
 # -------------------------------------------------
 def evaluate_test_mse(model, X_test, y_test, TFx_test, TFy_test):
     model.eval()
@@ -262,7 +262,7 @@ def evaluate_multi_step(model, X_test, y_test, TFx_test, TFy_test, steps=5):
 
 
 # -------------------------------------------------
-# Error summary (no labels)
+# Error summary
 # -------------------------------------------------
 def error_summary(y_true, y_pred, tau):
     """
