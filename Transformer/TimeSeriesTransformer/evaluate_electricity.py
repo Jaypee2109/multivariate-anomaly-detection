@@ -69,7 +69,7 @@ class ElectricityWindowDataset(torch.utils.data.Dataset):
             torch.from_numpy(tf_y),
         )
 
-    def _time_features(self, ts, target=False):
+    def _time_features(self, ts, sid, target=False):
         ts = pd.to_datetime(ts)
         feats = np.stack(
             [
@@ -78,6 +78,7 @@ class ElectricityWindowDataset(torch.utils.data.Dataset):
                     (t.minute // 15) / 3,
                     t.weekday() / 6,
                     t.dayofyear / 365,
+                    # sid / self.num_series, use for 5/6 model
                 ]
                 for t in ts
             ],
@@ -134,8 +135,12 @@ def forecast_autoregressive(
         minutes = np.array([(t.minute // 15) / 3 for t in ts[-lag:]], dtype=np.float32)
         wdays = np.array([t.weekday() / 6 for t in ts[-lag:]], dtype=np.float32)
         doy = np.array([t.dayofyear / 365 for t in ts[-lag:]], dtype=np.float32)
+        sid_feat = np.full_like(
+            hours, sid / len(vals), dtype=np.float32
+        )  # sid / num_series
 
-        tfx = np.stack([hours, minutes, wdays, doy], axis=-1)  # shape (lag,5)
+        # tfx = np.stack([hours, minutes, wdays, doy, sid_feat], axis=-1)  # shape (lag,5) use for 5/6 model
+        tfx = np.stack([hours, minutes, wdays, doy], axis=-1)
         x = torch.tensor(vals[-lag:], device=device)[None, :, None]  # shape (1, lag, 1)
         tfx = torch.tensor(tfx, device=device)[None]  # shape (1, lag, 5)
 
@@ -146,6 +151,7 @@ def forecast_autoregressive(
                     (ts[-1].minute // 15) / 3,
                     ts[-1].weekday() / 6,
                     ts[-1].dayofyear / 365,
+                    # sid / len(vals), use for 5/6 model
                     (step + 1) / steps,
                 ]
             ],
