@@ -14,6 +14,7 @@ import io
 import json
 import logging
 import os
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -37,8 +38,18 @@ from time_series_transformer.api.schemas import (
     ModelsInfoResponse,
     SingleModelResult,
 )
-from time_series_transformer.config import ARTIFACTS_DIR, RAW_DATA_DIR
+from time_series_transformer.config import ARTIFACTS_DIR, SMD_BASE_DIR
 from time_series_transformer.exceptions import TransformerError
+from time_series_transformer.models.multivariate.isolation_forest import (
+    MultivariateIsolationForestDetector,
+)
+from time_series_transformer.models.multivariate.lstm_autoencoder import (
+    LSTMAutoencoderAnomalyDetector,
+)
+from time_series_transformer.models.multivariate.lstm_forecaster import (
+    LSTMForecasterMultivariateDetector,
+)
+from time_series_transformer.models.multivariate.var import VARResidualAnomalyDetector
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +205,29 @@ async def get_model_detail(model_name: str) -> ModelDetail:
     return ModelDetail(**manager.get_model_info(model_name))
 
 
+@app.get("/artifacts/machines")
+async def list_artifact_machines() -> dict[str, Any]:
+    """List machines with pre-computed multivariate result artifacts."""
+    artifact_dir = ARTIFACTS_DIR / "multivariate"
+    if not artifact_dir.exists():
+        return {"machines": []}
+    machines = sorted(
+        p.stem.replace("_results", "")
+        for p in artifact_dir.glob("*_results.csv")
+    )
+    return {"machines": machines}
+
+
+@app.get("/artifacts/{machine_id}/models")
+async def list_artifact_models(machine_id: str) -> dict[str, Any]:
+    """List multivariate models available in the artifact CSV for a machine."""
+    df = _load_smd_artifact(machine_id)
+    if df is None:
+        raise HTTPException(status_code=404, detail=f"No artifact for '{machine_id}'")
+    models = _discover_artifact_models(df)
+    return {"machine_id": machine_id, "models": models}
+
+
 @app.post("/detect", response_model=DetectResponse)
 async def detect_anomalies(request: DetectRequest) -> DetectResponse:
     _validate_detect_input(request.data.timestamps, request.data.values)
@@ -295,28 +329,134 @@ async def detect_from_csv(
 
 
 # ---------------------------------------------------------------------------
-# WebSocket streaming
+# WebSocket streaming — multivariate model loading
+# ---------------------------------------------------------------------------
+
+# Checkpoint filename (without .pt) → loader class
+_MV_CHECKPOINT_LOADERS: dict[str, type] = {
+    "var_residual": VARResidualAnomalyDetector,
+    "isolation_forest_mv": MultivariateIsolationForestDetector,
+    "lstm_autoencoder": LSTMAutoencoderAnomalyDetector,
+    "lstm_forecaster_mv": LSTMForecasterMultivariateDetector,
+}
+
+
+def _load_multivariate_models(machine_id: str) -> dict[str, Any] | None:
+    """Load fitted multivariate model checkpoints for a machine.
+
+    Returns ``{slug: model_instance}`` or *None* if no checkpoints found.
+    """
+    ckpt_dir = ARTIFACTS_DIR / "checkpoints" / "multivariate" / machine_id
+    if not ckpt_dir.exists():
+        return None
+
+    models: dict[str, Any] = {}
+    for slug, cls in _MV_CHECKPOINT_LOADERS.items():
+        path = ckpt_dir / f"{slug}.pt"
+        if path.exists():
+            try:
+                models[slug] = cls.load_checkpoint(path)
+                logger.info("Loaded MV checkpoint: %s", path)
+            except Exception:
+                logger.warning("Failed to load checkpoint: %s", path, exc_info=True)
+    return models if models else None
+
+
+def _load_smd_test_data(machine_id: str) -> pd.DataFrame | None:
+    """Load raw SMD test data for a machine (unnormalised, matching training)."""
+    try:
+        from time_series_transformer.data_pipeline.smd_loading import load_smd_machine
+
+        data = load_smd_machine(machine_id, base_dir=SMD_BASE_DIR, normalize=False)
+        return data.test_df
+    except Exception:
+        logger.warning("Failed to load SMD test data for %s", machine_id, exc_info=True)
+        return None
+
+
+def _run_live_inference(
+    models: dict[str, Any],
+    test_df: pd.DataFrame,
+) -> tuple[dict[str, dict], float]:
+    """Run decision_function + predict on all loaded models.
+
+    Returns ``({slug: {"scores": [...], "anomalies": [...]}}, total_latency_ms)``.
+    """
+    results: dict[str, dict] = {}
+    total_latency = 0.0
+
+    for slug, model in models.items():
+        try:
+            t0 = time.time()
+            scores = model.decision_function(test_df)
+            anomalies = model.predict(test_df)
+            latency = (time.time() - t0) * 1000
+            total_latency += latency
+
+            results[slug] = {
+                "scores": [float(s) if pd.notna(s) else None for s in scores.values],
+                "anomalies": anomalies.astype(bool).tolist(),
+            }
+            logger.info("  %s: %d anomalies (%.0fms)", slug, int(anomalies.sum()), latency)
+        except Exception:
+            logger.warning("Live inference failed for %s", slug, exc_info=True)
+
+    return results, total_latency
+
+
+# ---------------------------------------------------------------------------
+# WebSocket streaming — artifact fallback
 # ---------------------------------------------------------------------------
 
 
-def _load_nab_dataset(rel_path: str) -> pd.DataFrame | None:
-    """Load a NAB CSV by its relative path under RAW_DATA_DIR/nab."""
-    csv_path = RAW_DATA_DIR / "nab" / rel_path
-    if not csv_path.exists():
+def _load_smd_artifact(machine_id: str) -> pd.DataFrame | None:
+    """Load pre-computed multivariate results from the artifact CSV.
+
+    The artifact CSV (``artifacts/multivariate/{machine_id}_results.csv``)
+    contains **test data only** with all feature values, ground-truth labels,
+    and per-model anomaly scores and predictions.
+    """
+    if not machine_id:
+        logger.warning("Empty machine_id received — client may be sending stale JS")
         return None
-    df = pd.read_csv(csv_path, parse_dates=["timestamp"])
-    if "timestamp" not in df.columns or "value" not in df.columns:
+
+    path = ARTIFACTS_DIR / "multivariate" / f"{machine_id}_results.csv"
+    if not path.exists():
+        logger.warning("Artifact CSV not found: %s", path)
         return None
-    return df.sort_values("timestamp")
+
+    try:
+        return pd.read_csv(path)
+    except Exception:
+        logger.warning("Failed to read artifact CSV: %s", path, exc_info=True)
+        return None
+
+
+def _discover_artifact_models(df: pd.DataFrame) -> list[str]:
+    """Extract model slugs from artifact CSV column names.
+
+    Looks for ``{model}_score`` columns that also have ``{model}_is_anomaly``.
+    """
+    models = []
+    for col in df.columns:
+        if col.endswith("_score"):
+            name = col[: -len("_score")]
+            if f"{name}_is_anomaly" in df.columns:
+                models.append(name)
+    return sorted(models)
 
 
 @app.websocket("/ws/stream")
 async def websocket_stream(ws: WebSocket) -> None:
     """Stream anomaly detection results over WebSocket.
 
+    Tries **live inference** first (load model checkpoints + raw test data,
+    run ``decision_function``).  Falls back to **artifact CSV** when no
+    checkpoints are available.
+
     Protocol:
-    1. Client connects and sends JSON config
-    2. Server loads dataset, runs batch inference, sends "init" message
+    1. Client connects and sends JSON config (machine_id, feature, models, ...)
+    2. Server loads models / artifact and sends "init" message
     3. Server streams "chunk" messages at configured rate
     4. Client can send control messages (pause/resume/reset/speed/close)
     5. Server sends "done" when dataset is exhausted
@@ -328,71 +468,133 @@ async def websocket_stream(ws: WebSocket) -> None:
         raw_config = await asyncio.wait_for(ws.receive_text(), timeout=10.0)
         config = json.loads(raw_config)
 
-        dataset_path = config.get("dataset_path", "")
+        machine_id = config.get("machine_id", "")
+        feature = config.get("feature", "cpu_r")
         model_slugs = config.get("models") or None
         chunk_size = max(1, min(100, config.get("chunk_size", 5)))
         interval_ms = max(100, min(10000, config.get("interval_ms", 1000)))
 
-        # Step 2: Load dataset server-side
-        df = _load_nab_dataset(dataset_path)
-        if df is None:
-            await ws.send_json({"type": "error", "detail": f"Dataset not found: {dataset_path}"})
-            await ws.close()
-            return
+        # Step 2: Prepare data — try live inference, fall back to artifact
+        mode = "artifact"
+        full_models: dict[str, dict] = {}
+        values: list[float] = []
+        total = 0
+        latency_ms = 0.0
+        slugs: list[str] = []
 
-        timestamps = df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
-        values = df["value"].tolist()
-        total = len(timestamps)
+        # --- Try live inference (checkpoints + raw test data) ---------------
+        mv_models = _load_multivariate_models(machine_id)
+        if mv_models:
+            test_df = _load_smd_test_data(machine_id)
+            if test_df is not None and feature in test_df.columns:
+                # Filter to requested models (or use all available)
+                active = (
+                    {s: m for s, m in mv_models.items() if s in model_slugs}
+                    if model_slugs
+                    else mv_models
+                )
+                if active:
+                    logger.info(
+                        "Running live inference for %s (%d models)…",
+                        machine_id, len(active),
+                    )
+                    full_models, latency_ms = await asyncio.to_thread(
+                        _run_live_inference, active, test_df,
+                    )
+                if full_models:
+                    values = test_df[feature].tolist()
+                    total = len(test_df)
+                    slugs = list(full_models.keys())
+                    mode = "live"
+                    logger.info(
+                        "Live inference complete: %d models, %.0fms",
+                        len(slugs), latency_ms,
+                    )
 
+        # --- Fall back to artifact CSV --------------------------------------
+        if mode == "artifact":
+            df = _load_smd_artifact(machine_id)
+            if df is None:
+                await ws.send_json({
+                    "type": "error",
+                    "detail": f"No data for machine '{machine_id}'. "
+                    "Run: python -m time_series_transformer train-mv "
+                    f"--machine {machine_id} --save-checkpoints",
+                })
+                await ws.close()
+                return
+
+            if feature not in df.columns:
+                await ws.send_json({
+                    "type": "error",
+                    "detail": f"Feature '{feature}' not found for {machine_id}",
+                })
+                await ws.close()
+                return
+
+            values = df[feature].tolist()
+            total = len(df)
+
+            available_models = _discover_artifact_models(df)
+            if not available_models:
+                await ws.send_json({
+                    "type": "error",
+                    "detail": "No model results in artifact",
+                })
+                await ws.close()
+                return
+
+            slugs = model_slugs or available_models
+            unknown = set(slugs) - set(available_models)
+            if unknown:
+                await ws.send_json({
+                    "type": "error",
+                    "detail": f"Unknown models: {sorted(unknown)}. "
+                    f"Available: {available_models}",
+                })
+                await ws.close()
+                return
+
+            for slug in slugs:
+                score_col = f"{slug}_score"
+                anom_col = f"{slug}_is_anomaly"
+                scores = (
+                    df[score_col].tolist()
+                    if score_col in df.columns
+                    else [0.0] * total
+                )
+                anomalies = (
+                    df[anom_col].astype(bool).tolist()
+                    if anom_col in df.columns
+                    else [False] * total
+                )
+                full_models[slug] = {
+                    "scores": [float(s) if pd.notna(s) else None for s in scores],
+                    "anomalies": anomalies,
+                }
+
+            logger.info("Using artifact CSV for %s (%d models)", machine_id, len(slugs))
+
+        # Step 3: Validate & generate timestamps
         if total < 10:
-            await ws.send_json({"type": "error", "detail": f"Dataset too small: {total} points"})
-            await ws.close()
-            return
-
-        # Step 3: Resolve models and run batch inference
-        slugs = model_slugs or manager.loaded_model_names
-        if not slugs:
-            await ws.send_json({"type": "error", "detail": "No models loaded"})
-            await ws.close()
-            return
-
-        unknown = set(slugs) - set(manager.loaded_model_names)
-        if unknown:
             await ws.send_json({
                 "type": "error",
-                "detail": f"Unknown models: {sorted(unknown)}. Available: {manager.loaded_model_names}",
+                "detail": f"Dataset too small: {total} points",
             })
             await ws.close()
             return
 
-        y = _build_series(timestamps, values)
-
-        try:
-            raw_results = manager.detect(y, model_slugs=slugs)
-        except Exception as exc:
-            await ws.send_json({"type": "error", "detail": f"Inference failed: {exc}"})
-            await ws.close()
-            return
-
-        # Pre-compute full result arrays (same format as /detect/dashboard)
-        total_latency = 0.0
-        full_models: dict[str, dict] = {}
-        for slug, (anomalies, scores, latency) in raw_results.items():
-            total_latency += latency
-            sc_vals = scores.values[-total:]
-            an_vals = anomalies.values[-total:]
-            full_models[slug] = {
-                "scores": [float(s) if pd.notna(s) else None for s in sc_vals],
-                "anomalies": [bool(a) for a in an_vals],
-            }
+        ts_index = pd.date_range("2020-01-01", periods=total, freq="min")
+        timestamps = ts_index.strftime("%Y-%m-%dT%H:%M:%S").tolist()
 
         # Send init message
         await ws.send_json({
             "type": "init",
             "total": total,
-            "dataset_name": dataset_path.split("/")[-1],
+            "dataset_name": f"{machine_id}/{feature}",
             "models_used": list(slugs),
-            "latency_ms": round(total_latency, 2),
+            "latency_ms": round(latency_ms, 1),
+            "mode": mode,
         })
 
         # Step 4: Stream chunks

@@ -9,7 +9,12 @@ import dash
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from dash import ClientsideFunction, Input, Output, State, callback, clientside_callback, ctx, dcc, html
-from datasets import list_smd_machines, load_smd_train_test
+from datasets import (
+    discover_smd_features,
+    discover_smd_models,
+    list_smd_machines,
+    load_smd_results,
+)
 from plotly.subplots import make_subplots
 
 logger = logging.getLogger(__name__)
@@ -104,20 +109,14 @@ def _controls_section() -> dbc.Container:
                     # Model selector
                     dbc.Col(
                         [
-                            html.Label("Models", className="small text-muted-light"),
-                            html.Div(
-                                [
-                                    dcc.Checklist(
-                                        id="lm-models",
-                                        options=[],
-                                        value=[],
-                                        inline=True,
-                                        className="model-checklist",
-                                    ),
-                                    html.Div(id="lm-models-status"),
-                                ],
-                                className="model-checklist-wrapper",
+                            html.Label("Model", className="small text-muted-light"),
+                            dcc.Dropdown(
+                                id="lm-models",
+                                options=[],
+                                value=None,
+                                clearable=False,
                             ),
+                            html.Div(id="lm-models-status"),
                         ],
                         md=3,
                     ),
@@ -283,15 +282,14 @@ clientside_callback(
     Input("lm-machine", "value"),
 )
 def update_feature_options(machine_id: str | None) -> tuple[list, str | None]:
-    """Populate feature dropdown when machine changes."""
+    """Populate feature dropdown when machine changes (from artifact CSV)."""
     if not machine_id:
         return [], None
     try:
-        result = load_smd_train_test(machine_id)
-        if result is None:
+        df = load_smd_results(machine_id)
+        if df is None:
             return [], None
-        train_df, _, _ = result
-        features = [c for c in train_df.columns if c.startswith("f") and c[1:].isdigit()]
+        features = discover_smd_features(df)
         options = [{"label": f, "value": f} for f in features]
         return options, features[0] if features else None
     except Exception:
@@ -313,28 +311,21 @@ def load_dataset_into_store(
     machine_id: str | None,
     feature: str | None,
 ) -> tuple[dict | None, None, dict, dict, bool]:
-    """Load the selected SMD machine data, disconnect WebSocket, and reset state."""
+    """Load artifact metadata for the selected machine, disconnect WebSocket, and reset state."""
     _reset = (None, None, {"index": 0, "consumed": 0}, {"action": "disconnect"}, True)
     if not machine_id or not feature:
         return _reset
-    try:
-        result = load_smd_train_test(machine_id)
-    except Exception:
-        logger.warning("Failed to load SMD data: %s", machine_id, exc_info=True)
-        return _reset
-    if result is None:
-        return _reset
 
-    train_df, test_df, _ = result
-    import pandas as pd
-    combined = pd.concat([train_df, test_df], ignore_index=True)
+    df = load_smd_results(machine_id)
+    if df is None:
+        return _reset
 
     return (
         {
             "machine_id": machine_id,
             "feature": feature,
             "name": f"{machine_id}/{feature}",
-            "total": len(combined),
+            "total": len(df),
         },
         None,
         {"index": 0, "consumed": 0},
@@ -352,22 +343,21 @@ def load_dataset_into_store(
     State("lm-models", "value"),
 )
 def populate_models(
-    _data: dict | None,
+    data: dict | None,
     _n: int,
-    current_selection: list[str],
-) -> tuple[list, list, html.Span | None]:
-    """Query API for loaded models and build checklist."""
-    from api_client import get_client
+    current_selection: str | None,
+) -> tuple[list, str | None, html.Span | None]:
+    """Discover multivariate models from artifact CSV for the selected machine."""
 
-    def _status_hint(label: str, tooltip: str) -> tuple[list, list, html.Span]:
-        """Return empty checklist + short label with detailed hover tooltip."""
+    def _status_hint(label: str, tooltip: str) -> tuple[list, None, html.Span]:
+        """Return empty dropdown + short label with detailed hover tooltip."""
         global _last_model_status  # noqa: PLW0603
         if _last_model_status != label:
             _last_model_status = label
             logger.warning("Live Monitoring: %s", tooltip)
         return (
             [],
-            [],
+            None,
             html.Span(
                 [html.I(className="bi bi-question-circle me-1"), label],
                 title=tooltip,
@@ -376,58 +366,40 @@ def populate_models(
             ),
         )
 
-    try:
-        client = get_client()
-        health = client.get_health()
-    except Exception:
-        logger.warning("Failed to contact inference API", exc_info=True)
-        return _status_hint("API error", "Check server logs for details")
-
-    if health is None:
+    machine_id = data.get("machine_id") if isinstance(data, dict) else None
+    if not machine_id:
         return _status_hint(
-            "API offline",
-            "Start with: python -m time_series_transformer serve",
+            "No machine",
+            "Select a machine to discover available models",
         )
 
-    model_slugs = health.get("models_loaded", [])
-    if not isinstance(model_slugs, list) or not model_slugs:
+    df = load_smd_results(machine_id)
+    if df is None:
         return _status_hint(
-            "No models loaded",
-            "Train with: python -m time_series_transformer train --save-checkpoints",
+            "No results",
+            f"No artifact for {machine_id}. "
+            f"Run: python -m time_series_transformer train-mv --machine {machine_id}",
+        )
+
+    model_slugs = discover_smd_models(df)
+    if not model_slugs:
+        return _status_hint(
+            "No models",
+            f"Artifact for {machine_id} has no model columns",
         )
 
     global _last_model_status  # noqa: PLW0603
     _last_model_status = None
 
-    options = []
-    for i, slug in enumerate(sorted(model_slugs)):
-        color = _PALETTE[i % len(_PALETTE)]
-        options.append(
-            {
-                "label": html.Span(
-                    [
-                        html.Span(
-                            style={
-                                "display": "inline-block",
-                                "width": "10px",
-                                "height": "10px",
-                                "borderRadius": "50%",
-                                "backgroundColor": color,
-                                "marginRight": "6px",
-                            }
-                        ),
-                        html.Span(slug),
-                    ]
-                ),
-                "value": slug,
-            }
-        )
+    options = [{"label": slug, "value": slug} for slug in sorted(model_slugs)]
 
-    # Preserve current selection if still valid, otherwise select all
-    valid = [m for m in (current_selection or []) if m in model_slugs]
-    value = valid if valid else sorted(model_slugs)
+    # Preserve current selection if still valid, otherwise pick first
+    value = current_selection if current_selection in model_slugs else sorted(model_slugs)[0]
 
     return options, value, None  # clear status hint
+
+
+_CLEAN_BUFFER = {"chunks": [], "status": "disconnected", "init": None, "error": None}
 
 
 @callback(
@@ -435,6 +407,10 @@ def populate_models(
     Output("lm-state-store", "data", allow_duplicate=True),
     Output("lm-results-store", "data", allow_duplicate=True),
     Output("ws-trigger", "data", allow_duplicate=True),
+    Output("lm-chart", "figure", allow_duplicate=True),
+    Output("lm-summary", "children", allow_duplicate=True),
+    Output("lm-progress", "children", allow_duplicate=True),
+    Output("ws-buffer", "data", allow_duplicate=True),
     Input("lm-play-btn", "n_clicks"),
     Input("lm-pause-btn", "n_clicks"),
     Input("lm-reset-btn", "n_clicks"),
@@ -442,6 +418,7 @@ def populate_models(
     State("lm-dataset-store", "data"),
     State("lm-models", "value"),
     State("lm-speed", "value"),
+    State("ws-buffer", "data"),
     prevent_initial_call=True,
 )
 def toggle_playback(
@@ -450,42 +427,61 @@ def toggle_playback(
     _reset: int | None,
     state: dict | None,
     dataset: dict | None,
-    selected_models: list[str] | None,
+    selected_model: str | None,
     speed: int | None,
-) -> tuple[bool, dict, dict | None, dict | None]:
+    ws_buf: dict | None,
+) -> tuple:
     """Handle play/pause/reset — controls WebSocket connection."""
     NO = dash.no_update
     triggered = ctx.triggered_id
     if not isinstance(state, dict):
         state = {"index": 0, "consumed": 0}
     speed = speed or 5
+    ws_status = (ws_buf or {}).get("status", "disconnected")
 
     if triggered == "lm-play-btn":
+        # Resume if currently paused (keep chart, keep state)
+        if ws_status == "paused":
+            return NO, state, NO, {"action": "resume"}, NO, NO, NO, NO
+
+        # Ignore if already streaming (prevents duplicate-click issues)
+        if ws_status in ("connecting", "streaming"):
+            return NO, state, NO, NO, NO, NO, NO, NO
+
+        # Fresh start with new WebSocket connection
         machine_id = dataset.get("machine_id") if isinstance(dataset, dict) else None
         feature = dataset.get("feature") if isinstance(dataset, dict) else None
         if not machine_id or not feature:
-            return True, state, NO, NO
-        models = [m for m in (selected_models or []) if m and m != "__none__"]
+            return True, state, NO, NO, NO, NO, NO, NO
+        models = [selected_model] if selected_model else None
         ws_config = {
             "action": "connect",
             "config": {
                 "api_host": os.environ.get("ANOMALY_WS_HOST", "localhost:8000"),
                 "machine_id": machine_id,
                 "feature": feature,
-                "models": models or None,
+                "models": models,
                 "chunk_size": speed,
                 "interval_ms": 1000,
             },
         }
-        return False, {"index": 0, "consumed": 0}, None, ws_config
+        return (
+            False, {"index": 0, "consumed": 0}, None, ws_config,
+            _empty_fig("Connecting..."), [], "",
+            _CLEAN_BUFFER,
+        )
 
     if triggered == "lm-pause-btn":
-        return NO, state, NO, {"action": "pause"}
+        return NO, state, NO, {"action": "pause"}, NO, NO, NO, NO
 
     if triggered == "lm-reset-btn":
-        return True, {"index": 0, "consumed": 0}, None, {"action": "disconnect"}
+        return (
+            True, {"index": 0, "consumed": 0}, None, {"action": "disconnect"},
+            _empty_fig("Select a dataset and press Play"), [], "",
+            _CLEAN_BUFFER,
+        )
 
-    return True, state, NO, NO
+    return True, state, NO, NO, NO, NO, NO, NO
 
 
 @callback(
@@ -511,7 +507,7 @@ def tick(
     ws_buffer: dict | None,
     state: dict | None,
     cache: dict | None,
-    selected_models: list[str],
+    selected_model: str | None,
     speed: int,
 ) -> tuple:
     """Core tick: consume WebSocket chunks and update the chart.
@@ -545,8 +541,8 @@ def tick(
         detail = ws_error or "Unknown error"
         return _err(f"WebSocket error: {detail}", api=False)
 
-    # Nothing to do yet (disconnected, no data)
-    if ws_status == "disconnected" and not all_chunks:
+    # Only process data when actively streaming or finished
+    if ws_status not in ("streaming", "done"):
         return (NO, NO, state, NO, NO, NO, NO, NO, NO)
 
     # Get unconsumed chunks
@@ -560,8 +556,8 @@ def tick(
 
     new_consumed = len(all_chunks)
 
-    # Filter models
-    selected = [m for m in (selected_models or []) if m and m != "__none__"]
+    # Active model (single selection)
+    selected = [selected_model] if selected_model else []
     color_map = {m: _PALETTE[i % len(_PALETTE)] for i, m in enumerate(sorted(selected))}
 
     # Merge new chunks into delta arrays
@@ -582,6 +578,7 @@ def tick(
 
     new_idx = idx + len(delta_ts)
     latency_ms = init_msg.get("latency_ms", 0) if init_msg else 0
+    infer_mode = init_msg.get("mode", "artifact") if init_msg else "artifact"
     finished = ws_status == "done" or new_idx >= total
 
     # ------------------------------------------------------------------
@@ -604,7 +601,8 @@ def tick(
                 {"index": new_idx, "consumed": new_consumed},
                 acc_cache,
                 [html.Span("No models selected — showing raw data only.", className="text-muted-light")],
-                f"{new_idx:,} / {total:,}", "", _api_badge(True), finished,
+                f"{new_idx:,} / {total:,}", _mode_badge(infer_mode, latency_ms),
+                _api_badge(True), finished,
             )
 
         try:
@@ -619,7 +617,7 @@ def tick(
             {"index": new_idx, "consumed": new_consumed},
             acc_cache, summary,
             f"{new_idx:,} / {total:,}",
-            f"Computed in {latency_ms:.0f}ms",
+            _mode_badge(infer_mode, latency_ms),
             _api_badge(True), finished,
         )
 
@@ -658,7 +656,7 @@ def tick(
         {"index": new_idx, "consumed": new_consumed},
         cache, summary,
         f"{new_idx:,} / {total:,}",
-        f"Computed in {latency_ms:.0f}ms",
+        _mode_badge(infer_mode, latency_ms),
         _api_badge(True), finished,
     )
 
@@ -806,68 +804,6 @@ def _build_init_figure(
         ann.update(font_color="#aaaaaa", font_size=12)
 
     return fig
-
-
-def _compute_extend_data(
-    cache: dict,
-    old_idx: int,
-    new_idx: int,
-    selected_models: list[str],
-) -> list | None:
-    """Return a Plotly ``extendData`` payload for the delta points.
-
-    Format: ``[{x: [[...], ...], y: [[...], ...]}, indices, maxPoints]``
-    """
-    if new_idx <= old_idx:
-        return None
-
-    full_chart = cache.get("chart_data", {})
-    ts_delta = full_chart.get("timestamps", [])[old_idx:new_idx]
-    vals_delta = full_chart.get("values", [])[old_idx:new_idx]
-
-    if not ts_delta:
-        return None
-
-    n_delta = len(ts_delta)
-    models_data = full_chart.get("models") or {}
-    x_arrays: list[list] = [ts_delta]  # trace 0: value line
-    y_arrays: list[list] = [vals_delta]
-    indices: list[int] = [0]
-
-    for i, model_slug in enumerate(sorted(selected_models)):
-        mdata = models_data.get(model_slug)
-        if not isinstance(mdata, dict):
-            # No data for this model — send empty/zeroed delta to keep traces aligned
-            x_arrays.append([None] * n_delta)
-            y_arrays.append([None] * n_delta)
-            indices.append(1 + 2 * i)
-            x_arrays.append(ts_delta)
-            y_arrays.append([0] * n_delta)
-            indices.append(2 + 2 * i)
-            continue
-
-        scores = mdata.get("scores", [])[old_idx:new_idx]
-        anomalies = mdata.get("anomalies", [])[old_idx:new_idx]
-
-        # Pad if API returned fewer points
-        if len(anomalies) < n_delta:
-            anomalies = anomalies + [False] * (n_delta - len(anomalies))
-        if len(scores) < n_delta:
-            scores = scores + [0] * (n_delta - len(scores))
-
-        # Marker trace (1 + 2*i) — None where no anomaly
-        mk_x = [t if a else None for t, a in zip(ts_delta, anomalies, strict=False)]
-        mk_y = [v if a else None for v, a in zip(vals_delta, anomalies, strict=False)]
-        x_arrays.append(mk_x)
-        y_arrays.append(mk_y)
-        indices.append(1 + 2 * i)
-
-        # Score trace (2 + 2*i)
-        x_arrays.append(ts_delta)
-        y_arrays.append([s if s is not None else 0 for s in scores])
-        indices.append(2 + 2 * i)
-
-    return [{"x": x_arrays, "y": y_arrays}, indices, CHART_WINDOW]
 
 
 def _build_extend_from_delta(
@@ -1052,6 +988,19 @@ def update_ws_speed(
         return dash.no_update
     speed = speed or 5
     return {"action": "speed", "chunk_size": speed, "interval_ms": 1000}
+
+
+def _mode_badge(mode: str, latency_ms: float) -> html.Span:
+    """Return inference mode + latency indicator."""
+    if mode == "live":
+        icon = "bi bi-lightning-charge-fill me-1"
+        label = f"Live inference ({latency_ms:.0f}ms)"
+        cls = "status-online"
+    else:
+        icon = "bi bi-archive-fill me-1"
+        label = "Pre-computed (artifact)"
+        cls = "text-muted-light"
+    return html.Span([html.I(className=icon), label], className=cls)
 
 
 def _api_badge(online: bool | None) -> html.Span:

@@ -11,7 +11,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import Input, Output, callback, dcc, html
-from datasets import add_anomaly_zones, list_smd_machines, load_smd_train_test
+from datasets import add_anomaly_zones, is_feature_column, list_smd_machines, load_smd_train_test
 
 dash.register_page(__name__, path="/analysis", name="Data Analysis", order=1)
 
@@ -376,7 +376,7 @@ def load_data(
         labels.iloc[len(train_df):] = test_labels.values.astype(bool)
         df["is_anomaly"] = labels
 
-    features = [c for c in df.columns if c.startswith("f") and c[1:].isdigit()]
+    features = [c for c in df.columns if is_feature_column(c)]
     feat_options = [{"label": f, "value": f} for f in features]
     feat_default = features[0] if features else None
 

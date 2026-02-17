@@ -18,7 +18,11 @@ if str(_project_root / "src") not in sys.path:
 
 from datasets import (
     add_anomaly_zones,
+    discover_smd_models,
+    discover_smd_results,
+    is_feature_column,
     list_smd_machines,
+    load_smd_results,
     load_smd_train_test,
 )  # noqa: E402
 
@@ -66,7 +70,7 @@ def _models_card() -> dbc.Card:
         dbc.CardBody(
             [
                 html.H5(
-                    [html.I(className="bi bi-cpu me-2"), "Loaded Models"],
+                    [html.I(className="bi bi-cpu me-2"), "Trained Models"],
                     className="card-title",
                 ),
                 dcc.Loading(
@@ -275,6 +279,7 @@ layout = html.Div(
     Input("status-interval", "n_intervals"),
 )
 def update_status(_n: int) -> tuple:
+    # --- API status (inference server) ---
     from api_client import get_client
 
     client = get_client()
@@ -285,50 +290,47 @@ def update_status(_n: int) -> tuple:
             [html.I(className="bi bi-x-circle me-2"), "Offline"],
             className="status-offline",
         )
+    elif health.get("status") == "healthy":
+        api_content = html.Span(
+            [html.I(className="bi bi-check-circle me-2"), "Online"],
+            className="status-online",
+        )
+    else:
+        api_content = html.Span(
+            [html.I(className="bi bi-exclamation-triangle me-2"), health.get("status", "unknown")],
+            className="status-offline",
+        )
+
+    # --- Trained models (from artifact CSVs) ---
+    results = discover_smd_results()
+    if not results:
         models_content = html.Span(
-            [html.I(className="bi bi-question-circle me-1"), "API offline"],
-            title="Start with: python -m time_series_transformer serve",
+            [html.I(className="bi bi-question-circle me-1"), "No results"],
+            title="Train with: python -m time_series_transformer train-mv --machine machine-1-1",
             className="text-muted-light small",
             style={"cursor": "help"},
         )
         return api_content, models_content
 
-    status = health.get("status", "unknown")
-    models_loaded = health.get("models_loaded", [])
+    # Discover models from first available artifact
+    df = load_smd_results(results[0]["value"])
+    model_slugs = discover_smd_models(df) if df is not None else []
 
-    if status == "healthy":
-        api_content = html.Div(
-            [
-                html.Span(
-                    [html.I(className="bi bi-check-circle me-2"), "Online"],
-                    className="status-online",
-                ),
-                html.Br(),
-                html.Small(
-                    f"{len(models_loaded)} model(s) ready",
-                    className="text-muted-light",
-                ),
-            ]
-        )
-    else:
-        api_content = html.Div(
-            [
-                html.Span(
-                    [html.I(className="bi bi-exclamation-triangle me-2"), status],
-                    className="status-offline",
-                ),
-            ]
-        )
-
-    if models_loaded:
+    if model_slugs:
         model_badges = [
-            dbc.Badge(name, color="primary", className="me-1 mb-1")
-            for name in models_loaded
+            dbc.Badge(slug, color="primary", className="me-1 mb-1")
+            for slug in model_slugs
         ]
-        models_content = html.Div(model_badges)
+        models_content = html.Div([
+            html.Div(model_badges),
+            html.Small(
+                f"{len(results)} machine(s) trained",
+                className="text-muted-light",
+            ),
+        ])
     else:
         models_content = html.Span(
-            [html.I(className="bi bi-question-circle me-1"), "No models loaded"],
+            [html.I(className="bi bi-question-circle me-1"), "No models found"],
             title="Train with: python -m time_series_transformer train-mv --machine machine-1-1",
             className="text-muted-light small",
             style={"cursor": "help"},
@@ -356,7 +358,7 @@ def update_dataset_graph(machine_id: str) -> go.Figure:
 
     train_df, test_df, test_labels = result
     df = pd.concat([train_df, test_df], ignore_index=True)
-    features = [c for c in df.columns if c.startswith("f") and c[1:].isdigit()]
+    features = [c for c in df.columns if is_feature_column(c)]
     show_features = features[:4]
 
     fig = go.Figure()
@@ -375,9 +377,7 @@ def update_dataset_graph(machine_id: str) -> go.Figure:
     # Show ground-truth anomaly zones (test split only)
     if test_labels is not None:
         # Build full-length mask: False for train, actual labels for test
-        import pandas as _pd
-
-        full_mask = _pd.Series(False, index=range(len(df)))
+        full_mask = pd.Series(False, index=range(len(df)))
         full_mask.iloc[len(train_df) :] = test_labels.values.astype(bool)
         add_anomaly_zones(fig, full_mask)
 

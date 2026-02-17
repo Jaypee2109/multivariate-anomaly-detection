@@ -16,6 +16,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from time_series_transformer.config import ARTIFACTS_DIR, SMD_BASE_DIR  # noqa: E402
+from time_series_transformer.data_pipeline.smd_loading import SMD_COLUMN_NAMES  # noqa: E402
+
+# Columns that are NOT features in artifact CSVs
+_NON_FEATURE_SUFFIXES = ("_score", "_is_anomaly")
+_NON_FEATURE_NAMES = {"is_anomaly"}
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -62,8 +67,18 @@ def discover_smd_models(df: pd.DataFrame) -> list[str]:
 
 
 def discover_smd_features(df: pd.DataFrame) -> list[str]:
-    """Return feature column names (f0, f1, ...) from the results DataFrame."""
-    return [c for c in df.columns if c.startswith("f") and c[1:].isdigit()]
+    """Return feature column names from the results DataFrame.
+
+    Recognises both real column names (cpu_r, load_1, ...) and legacy
+    generic names (f0, f1, ...).
+    """
+    smd_set = set(SMD_COLUMN_NAMES)
+    features = [
+        c for c in df.columns
+        if c in smd_set
+        or (c.startswith("f") and c[1:].isdigit())
+    ]
+    return features
 
 
 def get_default_machine() -> str | None:
@@ -109,6 +124,19 @@ def list_smd_machines() -> list[dict[str, str]]:
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
+
+def is_feature_column(col: str) -> bool:
+    """Return True if *col* is an SMD feature (real or legacy name)."""
+    if col in _NON_FEATURE_NAMES:
+        return False
+    if any(col.endswith(s) for s in _NON_FEATURE_SUFFIXES):
+        return False
+    if col in set(SMD_COLUMN_NAMES):
+        return True
+    if col.startswith("f") and col[1:].isdigit():
+        return True
+    return False
 
 
 def build_color_map(models: list[str]) -> dict[str, str]:

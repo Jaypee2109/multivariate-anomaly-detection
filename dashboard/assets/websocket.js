@@ -21,6 +21,7 @@ if (!window._wsState) {
         initMsg: null,
         status: "disconnected",
         error: null,
+        bufferReset: false,
     };
 }
 
@@ -49,6 +50,7 @@ window.dash_clientside.ws = {
             state.initMsg = null;
             state.status = "connecting";
             state.error = null;
+            state.bufferReset = true;  /* Signal drain to discard old store data */
 
             var config = trigger.config || {};
             var protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -61,10 +63,11 @@ window.dash_clientside.ws = {
             ws.onopen = function () {
                 state.status = "connected";
                 ws.send(JSON.stringify({
-                    dataset_path: config.dataset_path,
+                    machine_id: config.machine_id,
+                    feature: config.feature,
                     models: config.models || null,
                     chunk_size: config.chunk_size || 5,
-                    interval_ms: config.interval_ms || 200,
+                    interval_ms: config.interval_ms || 1000,
                 }));
             };
 
@@ -110,6 +113,7 @@ window.dash_clientside.ws = {
             state.initMsg = null;
             state.status = "disconnected";
             state.error = null;
+            state.bufferReset = true;  /* Signal drain to discard old store data */
 
         } else if (action === "pause" || action === "resume" || action === "reset") {
             if (state.ws && state.ws.readyState === 1) {
@@ -147,8 +151,17 @@ window.dash_clientside.ws = {
     drain: function (_n, currentBuffer) {
         var state = window._wsState;
 
+        /* On connect/disconnect, discard stale store data */
+        var oldChunks;
+        if (state.bufferReset) {
+            oldChunks = [];
+            state.bufferReset = false;
+        } else {
+            oldChunks = (currentBuffer && currentBuffer.chunks) ? currentBuffer.chunks : [];
+        }
+
         var newBuffer = {
-            chunks: (currentBuffer && currentBuffer.chunks) ? currentBuffer.chunks : [],
+            chunks: oldChunks,
             status: state.status,
             init: state.initMsg,
             error: state.error,
