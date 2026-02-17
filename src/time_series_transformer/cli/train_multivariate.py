@@ -33,7 +33,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--model",
         action="append",
         dest="models",
-        choices=["var", "multi_isolation_forest", "lstm_autoencoder", "lstm_forecaster"],
+        choices=["var", "multi_isolation_forest", "lstm_autoencoder", "lstm_forecaster", "tranad"],
         help="Train only these models (repeatable, default: all)",
     )
     parser.add_argument(

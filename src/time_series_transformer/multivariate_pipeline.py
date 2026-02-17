@@ -24,22 +24,19 @@ from time_series_transformer.config import (
     LSTM_AE_LR,
     LSTM_AE_NUM_LAYERS,
     LSTM_AE_SCORE_METRIC,
-    LSTM_FC_BATCH_SIZE,
-    LSTM_FC_DROPOUT,
-    LSTM_FC_EPOCHS,
-    LSTM_FC_ERROR_QUANTILE,
-    LSTM_FC_HIDDEN_SIZE,
-    LSTM_FC_LOOKBACK,
-    LSTM_FC_LR,
-    LSTM_FC_NUM_LAYERS,
-    LSTM_FC_SCORE_METRIC,
     MULTI_ISO_CONTAMINATION,
     RANDOM_STATE,
     SMD_BASE_DIR,
-    VAR_AGGREGATION,
-    VAR_IC,
-    VAR_MAXLAGS,
-    VAR_Z_THRESH,
+    TRANAD_BATCH_SIZE,
+    TRANAD_DIM_FF,
+    TRANAD_DROPOUT,
+    TRANAD_EPOCHS,
+    TRANAD_ERROR_QUANTILE,
+    TRANAD_LOOKBACK,
+    TRANAD_LR,
+    TRANAD_N_HEADS,
+    TRANAD_NUM_LAYERS,
+    TRANAD_SCORE_METRIC,
 )
 from time_series_transformer.data_pipeline.smd_loading import load_smd_machine
 from time_series_transformer.evaluation import (
@@ -54,19 +51,21 @@ from time_series_transformer.models.multivariate.isolation_forest import (
 from time_series_transformer.models.multivariate.lstm_autoencoder import (
     LSTMAutoencoderAnomalyDetector,
 )
-from time_series_transformer.models.multivariate.lstm_forecaster import (
-    LSTMForecasterMultivariateDetector,
-)
-from time_series_transformer.models.multivariate.var import VARResidualAnomalyDetector
+from time_series_transformer.models.multivariate.tranad import TranADAnomalyDetector
 
 logger = logging.getLogger(__name__)
 
 MULTIVARIATE_MODEL_REGISTRY: dict[str, str] = {
-    "var": "VAR Residual",
     "multi_isolation_forest": "Isolation Forest (MV)",
     "lstm_autoencoder": "LSTM Autoencoder",
+    "tranad": "TranAD",
+    # optional (use --model var / --model lstm_forecaster)
+    "var": "VAR Residual",
     "lstm_forecaster": "LSTM Forecaster (MV)",
 }
+
+# Models built by default (without --model filter)
+_DEFAULT_MODELS = {"multi_isolation_forest", "lstm_autoencoder", "tranad"}
 
 
 def _seed_everything(seed: int) -> None:
@@ -76,19 +75,15 @@ def _seed_everything(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def _build_multivariate_models() -> dict:
-    return {
-        "VAR Residual": VARResidualAnomalyDetector(
-            maxlags=VAR_MAXLAGS,
-            ic=VAR_IC,
-            z_thresh=VAR_Z_THRESH,
-            aggregation=VAR_AGGREGATION,
-        ),
-        "Isolation Forest (MV)": MultivariateIsolationForestDetector(
+def _build_model(key: str):
+    """Lazily build a single model by registry key."""
+    if key == "multi_isolation_forest":
+        return MultivariateIsolationForestDetector(
             contamination=MULTI_ISO_CONTAMINATION,
             random_state=RANDOM_STATE,
-        ),
-        "LSTM Autoencoder": LSTMAutoencoderAnomalyDetector(
+        )
+    if key == "lstm_autoencoder":
+        return LSTMAutoencoderAnomalyDetector(
             lookback=LSTM_AE_LOOKBACK,
             hidden_size=LSTM_AE_HIDDEN_SIZE,
             latent_dim=LSTM_AE_LATENT_DIM,
@@ -100,19 +95,59 @@ def _build_multivariate_models() -> dict:
             error_quantile=LSTM_AE_ERROR_QUANTILE,
             score_metric=LSTM_AE_SCORE_METRIC,
             device="auto",
-        ),
-        "LSTM Forecaster (MV)": LSTMForecasterMultivariateDetector(
-            lookback=LSTM_FC_LOOKBACK,
-            hidden_size=LSTM_FC_HIDDEN_SIZE,
-            num_layers=LSTM_FC_NUM_LAYERS,
-            dropout=LSTM_FC_DROPOUT,
-            batch_size=LSTM_FC_BATCH_SIZE,
-            lr=LSTM_FC_LR,
-            epochs=LSTM_FC_EPOCHS,
-            error_quantile=LSTM_FC_ERROR_QUANTILE,
-            score_metric=LSTM_FC_SCORE_METRIC,
+        )
+    if key == "tranad":
+        return TranADAnomalyDetector(
+            lookback=TRANAD_LOOKBACK,
+            n_heads=TRANAD_N_HEADS,
+            dim_feedforward=TRANAD_DIM_FF,
+            num_layers=TRANAD_NUM_LAYERS,
+            dropout=TRANAD_DROPOUT,
+            batch_size=TRANAD_BATCH_SIZE,
+            lr=TRANAD_LR,
+            epochs=TRANAD_EPOCHS,
+            error_quantile=TRANAD_ERROR_QUANTILE,
+            score_metric=TRANAD_SCORE_METRIC,
             device="auto",
-        ),
+        )
+    if key == "var":
+        from time_series_transformer.config import (
+            VAR_AGGREGATION, VAR_IC, VAR_MAXLAGS, VAR_Z_THRESH,
+        )
+        from time_series_transformer.models.multivariate.var import (
+            VARResidualAnomalyDetector,
+        )
+        return VARResidualAnomalyDetector(
+            maxlags=VAR_MAXLAGS, ic=VAR_IC,
+            z_thresh=VAR_Z_THRESH, aggregation=VAR_AGGREGATION,
+        )
+    if key == "lstm_forecaster":
+        from time_series_transformer.config import (
+            LSTM_FC_BATCH_SIZE, LSTM_FC_DROPOUT, LSTM_FC_EPOCHS,
+            LSTM_FC_ERROR_QUANTILE, LSTM_FC_HIDDEN_SIZE, LSTM_FC_LOOKBACK,
+            LSTM_FC_LR, LSTM_FC_NUM_LAYERS, LSTM_FC_SCORE_METRIC,
+        )
+        from time_series_transformer.models.multivariate.lstm_forecaster import (
+            LSTMForecasterMultivariateDetector,
+        )
+        return LSTMForecasterMultivariateDetector(
+            lookback=LSTM_FC_LOOKBACK, hidden_size=LSTM_FC_HIDDEN_SIZE,
+            num_layers=LSTM_FC_NUM_LAYERS, dropout=LSTM_FC_DROPOUT,
+            batch_size=LSTM_FC_BATCH_SIZE, lr=LSTM_FC_LR,
+            epochs=LSTM_FC_EPOCHS, error_quantile=LSTM_FC_ERROR_QUANTILE,
+            score_metric=LSTM_FC_SCORE_METRIC, device="auto",
+        )
+    raise ValueError(f"Unknown model key: {key!r}")
+
+
+def _build_multivariate_models(keys: set[str] | None = None) -> dict:
+    """Build models for the given keys (default: _DEFAULT_MODELS)."""
+    if keys is None:
+        keys = _DEFAULT_MODELS
+    return {
+        MULTIVARIATE_MODEL_REGISTRY[k]: _build_model(k)
+        for k in keys
+        if k in MULTIVARIATE_MODEL_REGISTRY
     }
 
 
@@ -135,22 +170,17 @@ def run_multivariate_pipeline(
     y_true = machine_data.test_labels
 
     # 2. Build models (optionally filtered)
-    all_models = _build_multivariate_models()
     if model_names is not None:
-        selected = {
-            MULTIVARIATE_MODEL_REGISTRY[n]
-            for n in model_names
-            if n in MULTIVARIATE_MODEL_REGISTRY
-        }
-        models = {k: v for k, v in all_models.items() if k in selected}
-        if not models:
+        keys = {n for n in model_names if n in MULTIVARIATE_MODEL_REGISTRY}
+        if not keys:
             logger.warning(
                 "No valid models selected. Available: %s",
                 list(MULTIVARIATE_MODEL_REGISTRY.keys()),
             )
             return
     else:
-        models = all_models
+        keys = None  # uses _DEFAULT_MODELS
+    models = _build_multivariate_models(keys)
 
     # 3. Train and evaluate
     results_df = X_test.copy()

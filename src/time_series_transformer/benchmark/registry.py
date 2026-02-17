@@ -215,6 +215,40 @@ def _register_multivariate_defaults() -> None:
         multivariate=True,
     )
 
+    from time_series_transformer.config import (
+        TRANAD_BATCH_SIZE,
+        TRANAD_DIM_FF,
+        TRANAD_DROPOUT,
+        TRANAD_EPOCHS,
+        TRANAD_ERROR_QUANTILE,
+        TRANAD_LOOKBACK,
+        TRANAD_LR,
+        TRANAD_N_HEADS,
+        TRANAD_NUM_LAYERS,
+        TRANAD_SCORE_METRIC,
+    )
+    from time_series_transformer.models.multivariate.tranad import (
+        TranADAnomalyDetector,
+    )
+
+    register_model(
+        "tranad",
+        lambda: TranADAnomalyDetector(
+            lookback=TRANAD_LOOKBACK,
+            n_heads=TRANAD_N_HEADS,
+            dim_feedforward=TRANAD_DIM_FF,
+            num_layers=TRANAD_NUM_LAYERS,
+            dropout=TRANAD_DROPOUT,
+            batch_size=TRANAD_BATCH_SIZE,
+            lr=TRANAD_LR,
+            epochs=TRANAD_EPOCHS,
+            error_quantile=TRANAD_ERROR_QUANTILE,
+            score_metric=TRANAD_SCORE_METRIC,
+            device="auto",
+        ),
+        multivariate=True,
+    )
+
 
 _register_defaults()
 _register_multivariate_defaults()

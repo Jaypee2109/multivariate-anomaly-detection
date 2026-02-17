@@ -181,6 +181,21 @@ LSTM_FC_ERROR_QUANTILE = _env_float("LSTM_FC_ERROR_QUANTILE", 0.97)
 LSTM_FC_SCORE_METRIC = _env_str("LSTM_FC_SCORE_METRIC", "mse")
 
 # ---------------------------------------------------------------------------
+# TranAD (multivariate)
+# ---------------------------------------------------------------------------
+
+TRANAD_LOOKBACK = _env_int("TRANAD_LOOKBACK", 10)
+TRANAD_N_HEADS = _env_int("TRANAD_N_HEADS", 0)  # 0 = auto (n_features)
+TRANAD_DIM_FF = _env_int("TRANAD_DIM_FF", 16)
+TRANAD_NUM_LAYERS = _env_int("TRANAD_NUM_LAYERS", 1)
+TRANAD_DROPOUT = _env_float("TRANAD_DROPOUT", 0.1)
+TRANAD_EPOCHS = _env_int("TRANAD_EPOCHS", 15)
+TRANAD_BATCH_SIZE = _env_int("TRANAD_BATCH_SIZE", 128)
+TRANAD_LR = _env_float("TRANAD_LR", 1e-4)
+TRANAD_ERROR_QUANTILE = _env_float("TRANAD_ERROR_QUANTILE", 0.99)
+TRANAD_SCORE_METRIC = _env_str("TRANAD_SCORE_METRIC", "mse")
+
+# ---------------------------------------------------------------------------
 # SMD dataset
 # ---------------------------------------------------------------------------
 
