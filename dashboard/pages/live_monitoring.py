@@ -894,72 +894,162 @@ def _build_progressive_summary(
         if not models_data or visible_to <= 0:
             return [html.Span("No detection results yet.", className="text-muted-light")]
 
-        summary: dict[str, dict] = {}
+        cards: list = []
         for slug, mdata in models_data.items():
             if not isinstance(mdata, dict):
                 continue
             anomalies = mdata.get("anomalies", [])[:visible_to]
-            count = sum(1 for a in anomalies if a)
-            ratio = count / visible_to if visible_to > 0 else 0
-            summary[slug] = {
-                "display_name": slug,
-                "anomaly_count": count,
-                "anomaly_ratio": ratio,
-            }
-        return _build_summary_cards(summary, color_map)
+            scores = mdata.get("scores", [])[:visible_to]
+            color = color_map.get(slug, "#636efa")
+            cards.extend(_build_model_summary(slug, anomalies, scores, visible_to, color))
+
+        return [dbc.Row(cards, className="g-3")] if cards else [
+            html.Span("No detection results yet.", className="text-muted-light")
+        ]
     except Exception:
         logger.error("Failed to build summary", exc_info=True)
         return [html.Span("Error computing summary.", className="text-muted-light")]
 
 
-def _build_summary_cards(summary: dict, color_map: dict[str, str]) -> list:
-    """Build a row of stat cards from API summary."""
-    if not summary:
-        return [html.Span("No detection results yet.", className="text-muted-light")]
+def _count_segments(flags: list[bool]) -> tuple[int, int]:
+    """Count contiguous anomaly segments and the longest streak."""
+    segments = 0
+    longest = 0
+    current = 0
+    for f in flags:
+        if f:
+            if current == 0:
+                segments += 1
+            current += 1
+            longest = max(longest, current)
+        else:
+            current = 0
+    return segments, longest
 
-    cards = []
-    for slug, info in summary.items():
-        display_name = info.get("display_name", slug)
-        anomaly_count = info.get("anomaly_count", 0)
-        anomaly_ratio = info.get("anomaly_ratio", 0)
-        color = color_map.get(slug, "#636efa")
 
-        card = dbc.Col(
-            dbc.Card(
-                dbc.CardBody(
+def _build_model_summary(
+    slug: str,
+    anomalies: list[bool],
+    scores: list,
+    visible_to: int,
+    color: str,
+) -> list:
+    """Build a row of stat cards for a single model."""
+    count = sum(1 for a in anomalies if a)
+    ratio = count / visible_to if visible_to > 0 else 0
+    segments, longest = _count_segments(anomalies)
+
+    # Score statistics (filter None values)
+    valid_scores = [s for s in scores if s is not None and isinstance(s, (int, float))]
+    score_mean = sum(valid_scores) / len(valid_scores) if valid_scores else 0
+    score_max = max(valid_scores) if valid_scores else 0
+    score_current = valid_scores[-1] if valid_scores else 0
+
+    # Card 1: Detection overview
+    overview_card = dbc.Col(
+        dbc.Card(
+            dbc.CardBody([
+                html.H6(
                     [
-                        html.H6(
-                            [
-                                html.Span(
-                                    style={
-                                        "display": "inline-block",
-                                        "width": "10px",
-                                        "height": "10px",
-                                        "borderRadius": "50%",
-                                        "backgroundColor": color,
-                                        "marginRight": "8px",
-                                    }
-                                ),
-                                display_name,
-                            ],
-                            className="card-title mb-2",
-                        ),
-                        html.Div(
-                            [
-                                _stat_row("Anomalies", str(anomaly_count)),
-                                _stat_row("Rate", f"{anomaly_ratio * 100:.2f}%"),
-                            ],
-                            className="small",
-                        ),
-                    ]
+                        html.Span(style={
+                            "display": "inline-block", "width": "10px",
+                            "height": "10px", "borderRadius": "50%",
+                            "backgroundColor": color, "marginRight": "8px",
+                        }),
+                        slug,
+                    ],
+                    className="card-title mb-2",
                 ),
-                className="card-dark shadow rounded-3 h-100",
-            ),
-            md=3,
-        )
-        cards.append(card)
+                html.Div([
+                    _stat_row("Anomalies", f"{count:,}"),
+                    _stat_row("Rate", f"{ratio * 100:.2f}%"),
+                    _stat_row("Processed", f"{visible_to:,} pts"),
+                ], className="small"),
+            ]),
+            className="card-dark shadow rounded-3 h-100",
+        ),
+        md=3,
+    )
 
-    return [dbc.Row(cards, className="g-3")]
+    # Card 2: Anomaly segments
+    segments_card = dbc.Col(
+        dbc.Card(
+            dbc.CardBody([
+                html.H6(
+                    [html.I(className="bi bi-segmented-nav me-2"), "Segments"],
+                    className="card-title mb-2",
+                ),
+                html.Div([
+                    _stat_row("Regions", str(segments)),
+                    _stat_row("Longest streak", f"{longest} pts"),
+                    _stat_row(
+                        "Avg length",
+                        f"{count / segments:.1f} pts" if segments > 0 else "—",
+                    ),
+                ], className="small"),
+            ]),
+            className="card-dark shadow rounded-3 h-100",
+        ),
+        md=3,
+    )
+
+    # Card 3: Score statistics
+    score_card = dbc.Col(
+        dbc.Card(
+            dbc.CardBody([
+                html.H6(
+                    [html.I(className="bi bi-graph-up me-2"), "Score Stats"],
+                    className="card-title mb-2",
+                ),
+                html.Div([
+                    _stat_row("Current", f"{score_current:.4g}"),
+                    _stat_row("Mean", f"{score_mean:.4g}"),
+                    _stat_row("Peak", f"{score_max:.4g}"),
+                ], className="small"),
+            ]),
+            className="card-dark shadow rounded-3 h-100",
+        ),
+        md=3,
+    )
+
+    # Card 4: Status
+    if count == 0:
+        status_icon = "bi bi-shield-check"
+        status_text = "No anomalies detected"
+        status_cls = "status-online"
+    elif ratio > 0.1:
+        status_icon = "bi bi-exclamation-triangle-fill"
+        status_text = "High anomaly rate"
+        status_cls = "status-offline"
+    else:
+        status_icon = "bi bi-info-circle"
+        status_text = "Anomalies detected"
+        status_cls = "text-warning"
+
+    status_card = dbc.Col(
+        dbc.Card(
+            dbc.CardBody([
+                html.H6(
+                    [html.I(className="bi bi-activity me-2"), "Status"],
+                    className="card-title mb-2",
+                ),
+                html.Div([
+                    html.Div(
+                        [html.I(className=f"{status_icon} me-2"), status_text],
+                        className=f"mb-2 {status_cls}",
+                    ),
+                    _stat_row(
+                        "Latest",
+                        "Anomaly" if (anomalies and anomalies[-1]) else "Normal",
+                    ),
+                ], className="small"),
+            ]),
+            className="card-dark shadow rounded-3 h-100",
+        ),
+        md=3,
+    )
+
+    return [overview_card, segments_card, score_card, status_card]
 
 
 def _stat_row(label: str, value: str) -> html.Div:
