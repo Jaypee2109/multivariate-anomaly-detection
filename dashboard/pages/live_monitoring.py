@@ -9,7 +9,7 @@ import dash
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from dash import ClientsideFunction, Input, Output, State, callback, clientside_callback, ctx, dcc, html
-from datasets import discover_categories, discover_datasets, load_dataset
+from datasets import list_smd_machines, load_smd_train_test
 from plotly.subplots import make_subplots
 
 logger = logging.getLogger(__name__)
@@ -68,23 +68,22 @@ def _empty_fig(msg: str = "No data") -> go.Figure:
 
 
 def _controls_section() -> dbc.Container:
-    categories = discover_categories()
-    default_cat = categories[0]["value"] if categories else None
-    default_datasets = discover_datasets(default_cat) if default_cat else []
+    machines = list_smd_machines()
+    default_machine = machines[0]["value"] if machines else None
 
     return dbc.Container(
         [
             html.H3("Live Monitoring", className="mb-3"),
             dbc.Row(
                 [
-                    # Dataset selectors
+                    # Machine + feature selectors
                     dbc.Col(
                         [
-                            html.Label("Category", className="small text-muted-light"),
+                            html.Label("Machine", className="small text-muted-light"),
                             dcc.Dropdown(
-                                id="lm-category",
-                                options=categories,
-                                value=default_cat,
+                                id="lm-machine",
+                                options=machines,
+                                value=default_machine,
                                 clearable=False,
                             ),
                         ],
@@ -92,15 +91,15 @@ def _controls_section() -> dbc.Container:
                     ),
                     dbc.Col(
                         [
-                            html.Label("Dataset", className="small text-muted-light"),
+                            html.Label("Feature", className="small text-muted-light"),
                             dcc.Dropdown(
-                                id="lm-dataset",
-                                options=default_datasets,
-                                value=default_datasets[0]["value"] if default_datasets else None,
+                                id="lm-feature",
+                                options=[],
+                                value=None,
                                 clearable=False,
                             ),
                         ],
-                        md=3,
+                        md=2,
                     ),
                     # Model selector
                     dbc.Col(
@@ -279,21 +278,25 @@ clientside_callback(
 
 
 @callback(
-    Output("lm-dataset", "options"),
-    Output("lm-dataset", "value"),
-    Input("lm-category", "value"),
+    Output("lm-feature", "options"),
+    Output("lm-feature", "value"),
+    Input("lm-machine", "value"),
 )
-def update_dataset_options(category: str | None) -> tuple[list, str | None]:
-    """Populate dataset dropdown when category changes."""
-    if not category:
+def update_feature_options(machine_id: str | None) -> tuple[list, str | None]:
+    """Populate feature dropdown when machine changes."""
+    if not machine_id:
         return [], None
     try:
-        datasets = discover_datasets(category)
+        result = load_smd_train_test(machine_id)
+        if result is None:
+            return [], None
+        train_df, _, _ = result
+        features = [c for c in train_df.columns if c.startswith("f") and c[1:].isdigit()]
+        options = [{"label": f, "value": f} for f in features]
+        return options, features[0] if features else None
     except Exception:
-        logger.warning("Failed to discover datasets for %s", category, exc_info=True)
+        logger.warning("Failed to discover features for %s", machine_id, exc_info=True)
         return [], None
-    first = datasets[0]["value"] if datasets else None
-    return datasets, first
 
 
 @callback(
@@ -302,36 +305,36 @@ def update_dataset_options(category: str | None) -> tuple[list, str | None]:
     Output("lm-state-store", "data", allow_duplicate=True),
     Output("ws-trigger", "data", allow_duplicate=True),
     Output("lm-interval", "disabled", allow_duplicate=True),
-    Input("lm-dataset", "value"),
+    Input("lm-machine", "value"),
+    Input("lm-feature", "value"),
     prevent_initial_call=True,
 )
 def load_dataset_into_store(
-    rel_path: str | None,
+    machine_id: str | None,
+    feature: str | None,
 ) -> tuple[dict | None, None, dict, dict, bool]:
-    """Load the selected dataset, disconnect WebSocket, and reset state."""
+    """Load the selected SMD machine data, disconnect WebSocket, and reset state."""
     _reset = (None, None, {"index": 0, "consumed": 0}, {"action": "disconnect"}, True)
-    if not rel_path:
+    if not machine_id or not feature:
         return _reset
     try:
-        df = load_dataset(rel_path)
+        result = load_smd_train_test(machine_id)
     except Exception:
-        logger.warning("Failed to load dataset: %s", rel_path, exc_info=True)
+        logger.warning("Failed to load SMD data: %s", machine_id, exc_info=True)
         return _reset
-    if df is None or df.empty:
+    if result is None:
         return _reset
 
-    # Validate required columns
-    if "timestamp" not in df.columns or "value" not in df.columns:
-        logger.warning(
-            "Dataset %s missing required columns (has: %s)", rel_path, list(df.columns)
-        )
-        return _reset
+    train_df, test_df, _ = result
+    import pandas as pd
+    combined = pd.concat([train_df, test_df], ignore_index=True)
 
     return (
         {
-            "rel_path": rel_path,
-            "name": rel_path.split("/")[-1],
-            "total": len(df),
+            "machine_id": machine_id,
+            "feature": feature,
+            "name": f"{machine_id}/{feature}",
+            "total": len(combined),
         },
         None,
         {"index": 0, "consumed": 0},
@@ -458,15 +461,17 @@ def toggle_playback(
     speed = speed or 5
 
     if triggered == "lm-play-btn":
-        rel_path = dataset.get("rel_path") if isinstance(dataset, dict) else None
-        if not rel_path:
+        machine_id = dataset.get("machine_id") if isinstance(dataset, dict) else None
+        feature = dataset.get("feature") if isinstance(dataset, dict) else None
+        if not machine_id or not feature:
             return True, state, NO, NO
         models = [m for m in (selected_models or []) if m and m != "__none__"]
         ws_config = {
             "action": "connect",
             "config": {
                 "api_host": os.environ.get("ANOMALY_WS_HOST", "localhost:8000"),
-                "dataset_path": rel_path,
+                "machine_id": machine_id,
+                "feature": feature,
                 "models": models or None,
                 "chunk_size": speed,
                 "interval_ms": 1000,

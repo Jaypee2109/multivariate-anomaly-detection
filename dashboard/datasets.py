@@ -1,8 +1,7 @@
-"""NAB dataset discovery and loading utilities for the dashboard."""
+"""SMD dataset discovery and loading utilities for the dashboard."""
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -13,90 +12,201 @@ _project_root = Path(__file__).resolve().parents[1]
 if str(_project_root / "src") not in sys.path:
     sys.path.insert(0, str(_project_root / "src"))
 
-from time_series_transformer.config import RAW_DATA_DIR  # noqa: E402
+import plotly.express as px
+import plotly.graph_objects as go
+
+from time_series_transformer.config import ARTIFACTS_DIR, SMD_BASE_DIR  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-NAB_ROOT = RAW_DATA_DIR / "nab"
-LABELS_DIR = _project_root / "data" / "labels" / "nab"
-
-CATEGORY_DISPLAY_NAMES: dict[str, str] = {
-    "realKnownCause": "Real (Known Cause)",
-    "realAWSCloudwatch": "Real (AWS Cloudwatch)",
-    "realAdExchange": "Real (Ad Exchange)",
-    "realTraffic": "Real (Traffic)",
-    "realTweets": "Real (Tweets)",
-    "artificialWithAnomaly": "Artificial (With Anomaly)",
-    "artificialNoAnomaly": "Artificial (No Anomaly)",
-}
+MULTIVARIATE_RESULTS_DIR = ARTIFACTS_DIR / "multivariate"
 
 # ---------------------------------------------------------------------------
-# Discovery
+# SMD result discovery (from pipeline artifact CSVs)
 # ---------------------------------------------------------------------------
 
 
-def discover_categories() -> list[dict[str, str]]:
-    """Return list of {value, label} dicts for the category dropdown."""
-    if not NAB_ROOT.exists():
+def discover_smd_results() -> list[dict[str, str]]:
+    """Return list of {value, label} dicts for machines with result artifacts."""
+    if not MULTIVARIATE_RESULTS_DIR.exists():
         return []
-    categories = []
-    for d in sorted(NAB_ROOT.iterdir()):
-        if d.is_dir() and not d.name.startswith((".", "_")):
-            display = CATEGORY_DISPLAY_NAMES.get(d.name, d.name)
-            categories.append({"value": d.name, "label": display})
-    return categories
+    results = []
+    for csv_path in sorted(MULTIVARIATE_RESULTS_DIR.glob("*_results.csv")):
+        machine_id = csv_path.stem.replace("_results", "")
+        results.append({"value": machine_id, "label": machine_id})
+    return results
 
 
-def discover_datasets(category: str) -> list[dict[str, str]]:
-    """Return list of {value, label} dicts for dataset files in a category."""
-    cat_dir = NAB_ROOT / category
-    if not cat_dir.exists():
-        return []
-    datasets = []
-    # NAB stores CSVs inside a nested same-name subfolder
-    for csv_path in sorted(cat_dir.glob("**/*.csv")):
-        if csv_path.name.startswith((".", "_")):
-            continue
-        stem = csv_path.stem
-        label = stem.replace("_", " ").title()
-        # Use relative path from NAB_ROOT as the value for uniqueness
-        rel = csv_path.relative_to(NAB_ROOT).as_posix()
-        datasets.append({"value": rel, "label": label})
-    return datasets
-
-
-def load_dataset(rel_path: str) -> pd.DataFrame | None:
-    """Load a NAB CSV by its relative path under NAB_ROOT."""
-    csv_path = NAB_ROOT / rel_path
-    if not csv_path.exists():
+def load_smd_results(machine_id: str) -> pd.DataFrame | None:
+    """Load the artifact CSV for a given machine."""
+    path = MULTIVARIATE_RESULTS_DIR / f"{machine_id}_results.csv"
+    if not path.exists():
         return None
-    df = pd.read_csv(csv_path, parse_dates=["timestamp"])
-    return df
+    return pd.read_csv(path)
 
 
-def load_labels(category: str, filename: str) -> list[str]:
-    """Load ground-truth anomaly timestamps for a dataset.
+def discover_smd_models(df: pd.DataFrame) -> list[str]:
+    """Extract model names from artifact CSV column naming pattern.
 
-    Returns list of timestamp strings, or empty list if no labels available.
+    Looks for ``{model}_score`` columns that also have ``{model}_is_anomaly``.
     """
-    label_file = LABELS_DIR / f"{category}.json"
-    if not label_file.exists():
+    models = []
+    for col in df.columns:
+        if col.endswith("_score"):
+            name = col[: -len("_score")]
+            if f"{name}_is_anomaly" in df.columns:
+                models.append(name)
+    return sorted(models)
+
+
+def discover_smd_features(df: pd.DataFrame) -> list[str]:
+    """Return feature column names (f0, f1, ...) from the results DataFrame."""
+    return [c for c in df.columns if c.startswith("f") and c[1:].isdigit()]
+
+
+def get_default_machine() -> str | None:
+    """Return the first available machine, or None."""
+    results = discover_smd_results()
+    return results[0]["value"] if results else None
+
+
+# ---------------------------------------------------------------------------
+# Raw SMD data loading (for data analysis page)
+# ---------------------------------------------------------------------------
+
+
+def load_smd_train_test(
+    machine_id: str,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series] | None:
+    """Load raw SMD train/test/labels for EDA.
+
+    Returns (train_df, test_df, test_labels) or None if data not available.
+    """
+    try:
+        from time_series_transformer.data_pipeline.smd_loading import load_smd_machine
+
+        data = load_smd_machine(machine_id, base_dir=SMD_BASE_DIR)
+        return data.train_df, data.test_df, data.test_labels
+    except Exception:
+        return None
+
+
+def list_smd_machines() -> list[dict[str, str]]:
+    """Return available SMD machines from the raw dataset directory."""
+    try:
+        from time_series_transformer.data_pipeline.smd_loading import (
+            list_smd_machines as _list,
+        )
+
+        machines = _list(SMD_BASE_DIR)
+        return [{"value": m, "label": m} for m in machines]
+    except Exception:
         return []
-    with open(label_file) as f:
-        all_labels: dict[str, list[str]] = json.load(f)
-    # Labels are keyed like "realKnownCause/nyc_taxi.csv"
-    key = f"{category}/{filename}"
-    return all_labels.get(key, [])
 
 
-def get_default_category() -> str:
-    """Return the default category to show on page load."""
-    return "realKnownCause"
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
 
 
-def get_default_dataset(category: str) -> str | None:
-    """Return the first dataset in a category, or None."""
-    datasets = discover_datasets(category)
-    return datasets[0]["value"] if datasets else None
+def build_color_map(models: list[str]) -> dict[str, str]:
+    """Stable color assignment: sorted alphabetically -> Plotly palette."""
+    palette = px.colors.qualitative.Plotly
+    return {m: palette[i % len(palette)] for i, m in enumerate(sorted(models))}
+
+
+def enforce_min_one(selected: list[str], fallback: list[str]) -> list[str]:
+    """Ensure at least one item is selected."""
+    if not selected and fallback:
+        return [fallback[0]]
+    return selected
+
+
+def anomaly_ranges(mask) -> list[tuple[int, int]]:
+    """Convert a boolean anomaly mask to a list of (start, end) index ranges.
+
+    Each range is inclusive on both ends so it can be passed directly to
+    ``fig.add_vrect(x0=start, x1=end, ...)``.
+    """
+    ranges: list[tuple[int, int]] = []
+    in_range = False
+    start = 0
+    for i, v in enumerate(mask):
+        if v and not in_range:
+            start = i
+            in_range = True
+        elif not v and in_range:
+            ranges.append((start, i - 1))
+            in_range = False
+    if in_range:
+        ranges.append((start, len(mask) - 1))
+    return ranges
+
+
+def add_anomaly_zones(
+    fig,
+    mask,
+    *,
+    color: str = "#ff5252",
+    opacity: float = 0.15,
+    label: str = "Anomaly (GT)",
+    row: int | None = None,
+    col: int | None = None,
+) -> None:
+    """Add toggleable anomaly-zone polygons to *fig*.
+
+    Instead of layout shapes (which ignore legend clicks), this builds a
+    single ``go.Scatter`` trace with ``fill='toself'`` so the zones can
+    be shown/hidden via the legend like any other trace.
+
+    The y-extent is derived from the traces already present in *fig*.
+    """
+    ranges = anomaly_ranges(mask)
+    if not ranges:
+        return
+
+    # Derive y-extent from existing traces so zones span the full plot
+    all_y: list[float] = []
+    for trace in fig.data:
+        if hasattr(trace, "y") and trace.y is not None:
+            for v in trace.y:
+                if isinstance(v, (int, float)) and v == v:  # skip NaN
+                    all_y.append(v)
+    if all_y:
+        y_lo, y_hi = min(all_y), max(all_y)
+    else:
+        y_lo, y_hi = 0, 1
+
+    # Convert hex colour to rgba fill string
+    if color.startswith("#") and len(color) == 7:
+        r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+    else:
+        r, g, b = 255, 82, 82
+    fill_rgba = f"rgba({r}, {g}, {b}, {opacity})"
+
+    # Build a single polygon trace (None-separated rectangles)
+    x_poly: list[float | None] = []
+    y_poly: list[float | None] = []
+    for x0, x1 in ranges:
+        x_poly.extend([x0 - 0.5, x0 - 0.5, x1 + 0.5, x1 + 0.5, x0 - 0.5, None])
+        y_poly.extend([y_lo, y_hi, y_hi, y_lo, y_lo, None])
+
+    trace_kw = {}
+    if row is not None and col is not None:
+        trace_kw = {"row": row, "col": col}
+
+    fig.add_trace(
+        go.Scatter(
+            x=x_poly,
+            y=y_poly,
+            fill="toself",
+            fillcolor=fill_rgba,
+            line=dict(width=0),
+            name=label,
+            showlegend=True,
+            hoverinfo="skip",
+        ),
+        **trace_kw,
+    )

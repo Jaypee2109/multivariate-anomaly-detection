@@ -1,4 +1,4 @@
-"""Data Analysis page — interactive EDA for NAB time series."""
+"""Data Analysis page — interactive EDA for SMD multivariate time series."""
 
 from __future__ import annotations
 
@@ -10,15 +10,8 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Input, Output, State, callback, dcc, html
-from datasets import (
-    discover_categories,
-    discover_datasets,
-    get_default_category,
-    get_default_dataset,
-    load_dataset,
-    load_labels,
-)
+from dash import Input, Output, callback, dcc, html
+from datasets import add_anomaly_zones, list_smd_machines, load_smd_train_test
 
 dash.register_page(__name__, path="/analysis", name="Data Analysis", order=1)
 
@@ -26,8 +19,8 @@ dash.register_page(__name__, path="/analysis", name="Data Analysis", order=1)
 # Defaults
 # ---------------------------------------------------------------------------
 
-_DEFAULT_CAT = get_default_category()
-_DEFAULT_DS = get_default_dataset(_DEFAULT_CAT)
+_MACHINES = list_smd_machines()
+_DEFAULT_MACHINE = _MACHINES[0]["value"] if _MACHINES else None
 
 # ---------------------------------------------------------------------------
 # Chart theme helpers
@@ -45,10 +38,7 @@ _DARK_LAYOUT = dict(
 
 def _empty_fig(msg: str = "No data") -> go.Figure:
     fig = go.Figure()
-    fig.update_layout(
-        **_DARK_LAYOUT,
-        title=msg,
-    )
+    fig.update_layout(**_DARK_LAYOUT, title=msg)
     return fig
 
 
@@ -58,10 +48,7 @@ def _empty_fig(msg: str = "No data") -> go.Figure:
 
 
 def _dataset_selector() -> dbc.Container:
-    """Category + dataset dropdowns."""
-    categories = discover_categories()
-    default_datasets = discover_datasets(_DEFAULT_CAT) if _DEFAULT_CAT else []
-
+    """Machine + feature dropdowns."""
     return dbc.Container(
         [
             html.H3("Dataset Selection", className="mb-3"),
@@ -69,11 +56,11 @@ def _dataset_selector() -> dbc.Container:
                 [
                     dbc.Col(
                         [
-                            html.Label("Category", className="small text-muted-light"),
+                            html.Label("Machine", className="small text-muted-light"),
                             dcc.Dropdown(
-                                id="ds-category",
-                                options=categories,
-                                value=_DEFAULT_CAT,
+                                id="ds-machine",
+                                options=_MACHINES,
+                                value=_DEFAULT_MACHINE,
                                 clearable=False,
                             ),
                         ],
@@ -81,15 +68,31 @@ def _dataset_selector() -> dbc.Container:
                     ),
                     dbc.Col(
                         [
-                            html.Label("Dataset", className="small text-muted-light"),
+                            html.Label("Feature", className="small text-muted-light"),
                             dcc.Dropdown(
-                                id="ds-dataset",
-                                options=default_datasets,
-                                value=_DEFAULT_DS,
+                                id="ds-feature",
+                                options=[],
+                                value=None,
                                 clearable=False,
                             ),
                         ],
-                        md=5,
+                        md=2,
+                    ),
+                    dbc.Col(
+                        [
+                            html.Label("Split", className="small text-muted-light"),
+                            dcc.Dropdown(
+                                id="ds-split",
+                                options=[
+                                    {"label": "Both", "value": "both"},
+                                    {"label": "Train", "value": "train"},
+                                    {"label": "Test", "value": "test"},
+                                ],
+                                value="both",
+                                clearable=False,
+                            ),
+                        ],
+                        md=2,
                     ),
                     dbc.Col(
                         [
@@ -101,7 +104,7 @@ def _dataset_selector() -> dbc.Container:
                                 className="mt-1",
                             ),
                         ],
-                        md=3,
+                        md=4,
                     ),
                 ],
                 className="g-3",
@@ -113,7 +116,7 @@ def _dataset_selector() -> dbc.Container:
 
 
 _STAT_TOOLTIPS: dict[str, str] = {
-    "stat-overview": ("Dataset size, time span, number of labeled anomalies, and missing values."),
+    "stat-overview": "Dataset size, number of features, number of labeled anomalies, and missing values.",
     "stat-central": (
         "Mean: arithmetic average. "
         "Median: middle value (robust to outliers). "
@@ -122,11 +125,11 @@ _STAT_TOOLTIPS: dict[str, str] = {
     "stat-spread": (
         "Std: standard deviation (average distance from the mean). "
         "Min/Max: value range. "
-        "IQR: interquartile range (Q3\u2013Q1), measures spread of the middle 50%."
+        "IQR: interquartile range (Q3-Q1), measures spread of the middle 50%."
     ),
     "stat-shape": (
-        "Skewness: asymmetry (\u22480 = symmetric, >0 = right tail, <0 = left tail). "
-        "Kurtosis: tail heaviness (\u22480 = normal, >0 = heavy tails). "
+        "Skewness: asymmetry (~0 = symmetric, >0 = right tail, <0 = left tail). "
+        "Kurtosis: tail heaviness (~0 = normal, >0 = heavy tails). "
         "Q1/Q3: 25th and 75th percentiles."
     ),
 }
@@ -248,11 +251,11 @@ def _rolling_section() -> dbc.Container:
                         selected_className="selected-diagramm-tab",
                     )
                     for val, label in [
-                        ("6", "6h"),
-                        ("12", "12h"),
-                        ("24", "24h"),
-                        ("48", "48h"),
-                        ("168", "7d"),
+                        ("6", "6"),
+                        ("12", "12"),
+                        ("24", "24"),
+                        ("48", "48"),
+                        ("100", "100"),
                     ]
                 ],
             ),
@@ -316,7 +319,6 @@ def _acf_section() -> dbc.Container:
 
 layout = html.Div(
     [
-        # Invisible store: holds the loaded dataframe as JSON
         dcc.Store(id="ds-store", storage_type="memory"),
         dbc.Row(
             dbc.Col(
@@ -343,38 +345,53 @@ layout = html.Div(
 
 
 @callback(
-    Output("ds-dataset", "options"),
-    Output("ds-dataset", "value"),
-    Input("ds-category", "value"),
-)
-def update_dataset_dropdown(category: str) -> tuple[list[dict], str | None]:
-    """Populate the dataset dropdown when category changes."""
-    datasets = discover_datasets(category) if category else []
-    first = datasets[0]["value"] if datasets else None
-    return datasets, first
-
-
-@callback(
     Output("ds-store", "data"),
-    Input("ds-dataset", "value"),
-    State("ds-category", "value"),
+    Output("ds-feature", "options"),
+    Output("ds-feature", "value"),
+    Input("ds-machine", "value"),
+    Input("ds-split", "value"),
 )
-def load_data(rel_path: str | None, category: str | None) -> dict | None:
-    """Load the selected dataset into the store."""
-    if not rel_path:
-        return None
-    df = load_dataset(rel_path)
-    if df is None:
-        return None
-    # Extract filename from rel_path for label lookup
-    filename = rel_path.split("/")[-1]
-    labels = load_labels(category, filename) if category else []
-    return {
-        "df": df.to_json(date_format="iso", orient="split"),
-        "name": filename,
-        "category": category,
-        "labels": labels,
-    }
+def load_data(
+    machine_id: str | None, split: str,
+) -> tuple[dict | None, list, str | None]:
+    """Load raw SMD data into the store, filtered by split."""
+    if not machine_id:
+        return None, [], None
+
+    result = load_smd_train_test(machine_id)
+    if result is None:
+        return None, [], None
+
+    train_df, test_df, test_labels = result
+
+    if split == "train":
+        df = train_df.copy()
+        df["is_anomaly"] = False
+    elif split == "test":
+        df = test_df.copy()
+        df["is_anomaly"] = test_labels.values.astype(bool)
+    else:  # both
+        df = pd.concat([train_df, test_df], ignore_index=True)
+        labels = pd.Series(False, index=df.index)
+        labels.iloc[len(train_df):] = test_labels.values.astype(bool)
+        df["is_anomaly"] = labels
+
+    features = [c for c in df.columns if c.startswith("f") and c[1:].isdigit()]
+    feat_options = [{"label": f, "value": f} for f in features]
+    feat_default = features[0] if features else None
+
+    return (
+        {
+            "df": df.to_json(orient="split"),
+            "features": features,
+            "machine_id": machine_id,
+            "has_labels": True,
+            "split": split,
+            "n_train": len(train_df),
+        },
+        feat_options,
+        feat_default,
+    )
 
 
 @callback(
@@ -383,15 +400,20 @@ def load_data(rel_path: str | None, category: str | None) -> dict | None:
     Output("stat-spread", "children"),
     Output("stat-shape", "children"),
     Input("ds-store", "data"),
+    Input("ds-feature", "value"),
 )
-def update_statistics(store: dict | None) -> tuple:
-    """Compute and display descriptive statistics."""
-    if not store:
-        empty = html.Span("—", className="text-muted-light")
+def update_statistics(
+    store: dict | None, feature: str | None,
+) -> tuple:
+    """Compute and display descriptive statistics for selected feature."""
+    empty = html.Span("-", className="text-muted-light")
+    if not store or not feature:
         return empty, empty, empty, empty
 
     df = pd.read_json(io.StringIO(store["df"]), orient="split")
-    v = df["value"]
+    if feature not in df.columns:
+        return empty, empty, empty, empty
+    v = df[feature]
 
     def _row(label: str, val: str) -> html.Div:
         return html.Div(
@@ -402,15 +424,16 @@ def update_statistics(store: dict | None) -> tuple:
             className="mb-1",
         )
 
-    n_labels = len(store.get("labels", []))
-    ts = pd.to_datetime(df["timestamp"])
-    duration = ts.max() - ts.min()
+    n_features = len(store.get("features", []))
+    n_labels = 0
+    if store.get("has_labels") and "is_anomaly" in df.columns:
+        n_labels = int(df["is_anomaly"].astype(bool).sum())
 
     overview = html.Div(
         [
             _row("Points", f"{len(df):,}"),
-            _row("Time span", str(duration)),
-            _row("Labels", f"{n_labels} anomaly points" if n_labels else "None"),
+            _row("Features", f"{n_features}"),
+            _row("Anomaly labels", f"{n_labels:,}"),
             _row("Missing", f"{v.isna().sum()}"),
         ]
     )
@@ -449,45 +472,75 @@ def update_statistics(store: dict | None) -> tuple:
 @callback(
     Output("ts-graph", "figure"),
     Input("ds-store", "data"),
+    Input("ds-feature", "value"),
     Input("ds-show-labels", "value"),
 )
-def update_timeseries(store: dict | None, show_labels: bool) -> go.Figure:
+def update_timeseries(
+    store: dict | None, feature: str | None, show_labels: bool,
+) -> go.Figure:
     """Render the time series with optional anomaly labels."""
-    if not store:
-        return _empty_fig("Select a dataset")
+    if not store or not feature:
+        return _empty_fig("Select a machine")
 
     df = pd.read_json(io.StringIO(store["df"]), orient="split")
-    fig = px.line(
-        df,
-        x="timestamp",
-        y="value",
-        labels={"timestamp": "", "value": "Value"},
-    )
-    fig.update_traces(line_color="#636efa")
+    if feature not in df.columns:
+        return _empty_fig(f"Feature {feature} not found")
 
-    # Overlay anomaly labels
-    if show_labels and store.get("labels"):
-        label_times = pd.to_datetime(store["labels"])
-        ts = pd.to_datetime(df["timestamp"])
-        mask = ts.isin(label_times)
-        if mask.any():
-            anom_df = df[mask.values]
-            fig.add_trace(
-                go.Scatter(
-                    x=anom_df["timestamp"],
-                    y=anom_df["value"],
-                    mode="markers",
-                    marker={"color": "#ff5252", "size": 6, "symbol": "x"},
-                    name="Anomaly (ground truth)",
-                )
+    split = store.get("split", "both")
+    n_train = store.get("n_train", 0)
+
+    fig = go.Figure()
+
+    if split == "both" and 0 < n_train < len(df):
+        # Train portion
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(n_train)),
+                y=df[feature].iloc[:n_train],
+                mode="lines",
+                name="Train",
+                line={"color": "#636efa", "width": 1},
             )
-
-    fig.update_layout(**_DARK_LAYOUT, showlegend=True)
-    fig.update_layout(
-        legend=dict(
-            bgcolor="rgba(0,0,0,0)",
-            font_color="#ffffff",
         )
+        # Test portion
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(n_train, len(df))),
+                y=df[feature].iloc[n_train:],
+                mode="lines",
+                name="Test",
+                line={"color": "#00e676", "width": 1},
+            )
+        )
+        # Boundary line
+        fig.add_vline(
+            x=n_train, line_dash="dash", line_color="#888888", line_width=1,
+            annotation_text="Train / Test",
+            annotation_font_color="#888888",
+            annotation_font_size=10,
+        )
+    else:
+        color = "#636efa" if split != "test" else "#00e676"
+        label = "Train" if split == "train" else ("Test" if split == "test" else feature)
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(len(df))),
+                y=df[feature],
+                mode="lines",
+                name=label,
+                line={"color": color, "width": 1},
+            )
+        )
+
+    if show_labels and "is_anomaly" in df.columns:
+        add_anomaly_zones(fig, df["is_anomaly"].astype(bool))
+
+    fig.update_layout(
+        **_DARK_LAYOUT,
+        showlegend=True,
+        legend=dict(bgcolor="rgba(0,0,0,0)", font_color="#ffffff"),
+        xaxis_title="Timestep",
+        yaxis_title=feature,
     )
     return fig
 
@@ -496,35 +549,41 @@ def update_timeseries(store: dict | None, show_labels: bool) -> go.Figure:
     Output("hist-graph", "figure"),
     Output("box-graph", "figure"),
     Input("ds-store", "data"),
+    Input("ds-feature", "value"),
 )
-def update_distribution(store: dict | None) -> tuple[go.Figure, go.Figure]:
-    """Render histogram and box plot."""
-    if not store:
+def update_distribution(
+    store: dict | None, feature: str | None,
+) -> tuple[go.Figure, go.Figure]:
+    """Render histogram and box plot for selected feature."""
+    if not store or not feature:
         return _empty_fig("No data"), _empty_fig("No data")
 
     df = pd.read_json(io.StringIO(store["df"]), orient="split")
+    if feature not in df.columns:
+        return _empty_fig("No data"), _empty_fig("No data")
+    v = df[feature]
 
-    # Histogram
     hist_fig = px.histogram(
-        df,
-        x="value",
+        x=v,
         nbins=80,
-        labels={"value": "Value", "count": "Count"},
-        title="Value Distribution",
+        labels={"x": feature, "count": "Count"},
+        title=f"{feature} Distribution",
     )
     hist_fig.update_traces(marker_color="#636efa")
     hist_fig.update_layout(**_DARK_LAYOUT)
 
-    # Box plot
     box_fig = go.Figure(
-        go.Box(
-            y=df["value"],
-            marker_color="#636efa",
-            boxmean="sd",
-            name="Value",
+        go.Violin(
+            y=v,
+            box_visible=True,
+            meanline_visible=True,
+            line_color="#636efa",
+            fillcolor="rgba(99, 110, 250, 0.3)",
+            name=feature,
+            points=False,
         )
     )
-    box_fig.update_layout(**_DARK_LAYOUT, title="Box Plot")
+    box_fig.update_layout(**_DARK_LAYOUT, title="Violin Plot")
 
     return hist_fig, box_fig
 
@@ -532,24 +591,31 @@ def update_distribution(store: dict | None) -> tuple[go.Figure, go.Figure]:
 @callback(
     Output("rolling-graph", "figure"),
     Input("ds-store", "data"),
+    Input("ds-feature", "value"),
     Input("rolling-tabs", "value"),
 )
-def update_rolling(store: dict | None, window_str: str) -> go.Figure:
+def update_rolling(
+    store: dict | None, feature: str | None, window_str: str,
+) -> go.Figure:
     """Render rolling mean and std."""
-    if not store:
+    if not store or not feature:
         return _empty_fig("No data")
 
     df = pd.read_json(io.StringIO(store["df"]), orient="split")
+    if feature not in df.columns:
+        return _empty_fig("No data")
+    v = df[feature]
     window = int(window_str)
+    x_axis = list(range(len(v)))
 
-    rolling_mean = df["value"].rolling(window=window, min_periods=1).mean()
-    rolling_std = df["value"].rolling(window=window, min_periods=1).std()
+    rolling_mean = v.rolling(window=window, min_periods=1).mean()
+    rolling_std = v.rolling(window=window, min_periods=1).std()
 
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
-            x=df["timestamp"],
-            y=df["value"],
+            x=x_axis,
+            y=v,
             mode="lines",
             name="Original",
             line={"color": "rgba(99,110,250,0.3)", "width": 1},
@@ -557,20 +623,19 @@ def update_rolling(store: dict | None, window_str: str) -> go.Figure:
     )
     fig.add_trace(
         go.Scatter(
-            x=df["timestamp"],
+            x=x_axis,
             y=rolling_mean,
             mode="lines",
             name=f"Rolling Mean ({window})",
             line={"color": "#00e676", "width": 2},
         )
     )
-    # Confidence band: mean ± 2*std
     upper = rolling_mean + 2 * rolling_std
     lower = rolling_mean - 2 * rolling_std
     fig.add_trace(
         go.Scatter(
-            x=pd.concat([df["timestamp"], df["timestamp"][::-1]]),
-            y=pd.concat([upper, lower[::-1]]),
+            x=x_axis + x_axis[::-1],
+            y=pd.concat([upper, lower[::-1]]).tolist(),
             fill="toself",
             fillcolor="rgba(0,230,118,0.1)",
             line={"color": "rgba(0,0,0,0)"},
@@ -582,6 +647,8 @@ def update_rolling(store: dict | None, window_str: str) -> go.Figure:
     fig.update_layout(
         **_DARK_LAYOUT,
         title=f"Rolling Statistics (window={window})",
+        xaxis_title="Timestep",
+        yaxis_title=feature,
         showlegend=True,
         legend=dict(bgcolor="rgba(0,0,0,0)", font_color="#ffffff"),
     )
@@ -592,20 +659,24 @@ def update_rolling(store: dict | None, window_str: str) -> go.Figure:
     Output("acf-graph", "figure"),
     Output("pacf-graph", "figure"),
     Input("ds-store", "data"),
+    Input("ds-feature", "value"),
 )
-def update_acf(store: dict | None) -> tuple[go.Figure, go.Figure]:
+def update_acf(
+    store: dict | None, feature: str | None,
+) -> tuple[go.Figure, go.Figure]:
     """Render ACF and PACF bar charts."""
-    if not store:
+    if not store or not feature:
         return _empty_fig("No data"), _empty_fig("No data")
 
     df = pd.read_json(io.StringIO(store["df"]), orient="split")
-    values = df["value"].dropna().values
+    if feature not in df.columns:
+        return _empty_fig("No data"), _empty_fig("No data")
+    values = df[feature].dropna().values
 
     n_lags = min(60, len(values) // 4)
     if n_lags < 2:
         return _empty_fig("Not enough data"), _empty_fig("Not enough data")
 
-    # ACF
     from statsmodels.tsa.stattools import acf, pacf
 
     acf_values = acf(values, nlags=n_lags, fft=True)
@@ -623,7 +694,6 @@ def update_acf(store: dict | None) -> tuple[go.Figure, go.Figure]:
         yaxis_title="Correlation",
     )
 
-    # PACF
     try:
         pacf_values = pacf(values, nlags=n_lags)
     except Exception:

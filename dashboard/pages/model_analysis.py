@@ -1,4 +1,4 @@
-"""Model Analysis page — compare anomaly detection models."""
+"""Model Analysis page — compare multivariate anomaly detection models on SMD."""
 
 from __future__ import annotations
 
@@ -6,18 +6,26 @@ import io
 
 import dash
 import dash_bootstrap_components as dbc
+import numpy as np
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import Input, Output, callback, dcc, html
-from mlflow_loader import (
+from datasets import (
+    add_anomaly_zones,
     build_color_map,
-    discover_models_from_artifacts,
+    discover_smd_features,
+    discover_smd_models,
     enforce_min_one,
-    load_artifacts_csv,
-    load_data_run_params,
-    load_mlflow_runs,
+    list_smd_machines,
+    load_smd_results,
+    load_smd_train_test,
 )
 from plotly.subplots import make_subplots
+from sklearn.metrics import (
+    precision_recall_fscore_support,
+    roc_auc_score,
+)
 
 dash.register_page(__name__, path="/models", name="Model Analysis", order=2)
 
@@ -42,57 +50,65 @@ def _empty_fig(msg: str = "No data") -> go.Figure:
 
 
 # ---------------------------------------------------------------------------
-# Metric definitions (point-level and range-level)
-# ---------------------------------------------------------------------------
-
-POINT_METRICS = [
-    ("metrics.point/f1", "F1"),
-    ("metrics.point/precision", "Precision"),
-    ("metrics.point/recall", "Recall"),
-    ("metrics.point/auc_roc", "AUC-ROC"),
-]
-
-RANGE_METRICS = [
-    ("metrics.range/f1", "F1"),
-    ("metrics.range/precision", "Precision"),
-    ("metrics.range/recall", "Recall"),
-    ("metrics.anomaly_rate", "Anomaly Rate"),
-]
-
-
-# ---------------------------------------------------------------------------
 # Layout components
 # ---------------------------------------------------------------------------
 
+_MACHINES = list_smd_machines()
+_DEFAULT_MACHINE = _MACHINES[0]["value"] if _MACHINES else None
+
 
 def _model_selector() -> dbc.Container:
-    """Model selection card — first box on the page, includes page title."""
+    """Machine selector + model checklist + feature dropdown."""
+    machines = _MACHINES
     return dbc.Container(
         [
             html.H3("Model Selection", className="mb-3"),
             dbc.Row(
                 [
                     dbc.Col(
-                        html.Label("Models", className="small text-muted-light"),
-                        width="auto",
+                        [
+                            html.Label("Machine", className="small text-muted-light"),
+                            dcc.Dropdown(
+                                id="ma-machine",
+                                options=machines,
+                                value=_DEFAULT_MACHINE,
+                                clearable=False,
+                            ),
+                        ],
+                        md=3,
                     ),
                     dbc.Col(
-                        html.Div(
-                            [
-                                dcc.Checklist(
-                                    id="ma-models",
-                                    options=[],
-                                    value=[],
-                                    inline=True,
-                                    className="model-checklist",
-                                ),
-                                html.Div(id="ma-models-status"),
-                            ],
-                            className="model-checklist-wrapper",
-                        ),
+                        [
+                            html.Label("Feature", className="small text-muted-light"),
+                            dcc.Dropdown(
+                                id="ma-feature",
+                                options=[],
+                                value=None,
+                                clearable=False,
+                            ),
+                        ],
+                        md=2,
+                    ),
+                    dbc.Col(
+                        [
+                            html.Label("Models", className="small text-muted-light"),
+                            html.Div(
+                                [
+                                    dcc.Checklist(
+                                        id="ma-models",
+                                        options=[],
+                                        value=[],
+                                        inline=True,
+                                        className="model-checklist",
+                                    ),
+                                    html.Div(id="ma-models-status"),
+                                ],
+                                className="model-checklist-wrapper",
+                            ),
+                        ],
                     ),
                 ],
-                className="align-items-center",
+                className="align-items-start g-3",
             ),
         ],
         fluid=True,
@@ -104,25 +120,6 @@ def _metric_bars_section() -> dbc.Container:
     return dbc.Container(
         [
             html.H3("Metric Comparison", className="mb-3"),
-            dcc.Tabs(
-                id="ma-metric-tabs",
-                value="point",
-                children=[
-                    dcc.Tab(
-                        label="Point",
-                        value="point",
-                        className="diagramm-tab-left",
-                        selected_className="selected-diagramm-tab",
-                    ),
-                    dcc.Tab(
-                        label="Range",
-                        value="range",
-                        className="diagramm-tab-right",
-                        selected_className="selected-diagramm-tab",
-                    ),
-                ],
-            ),
-            html.Hr(style={"borderColor": "#333", "margin": "0 0 4px 0"}),
             dbc.Row(
                 [
                     dbc.Col(
@@ -181,21 +178,6 @@ def _distributions_section() -> dbc.Container:
             ),
         ],
         fluid=True,
-        className="card-1 py-3 mt-4 shadow rounded-3",
-    )
-
-
-def _config_section() -> dbc.Container:
-    return dbc.Container(
-        [
-            html.H3("Model Configuration", className="mb-3"),
-            html.Div(
-                id="ma-config-table",
-                className="dark-scroll",
-                style={"maxHeight": "450px", "overflowY": "auto"},
-            ),
-        ],
-        fluid=True,
         className="card-1 py-3 mt-4 mb-4 shadow rounded-3",
     )
 
@@ -206,7 +188,6 @@ def _config_section() -> dbc.Container:
 
 layout = html.Div(
     [
-        dcc.Store(id="ma-init", data=True),
         dcc.Store(id="ma-store", storage_type="memory"),
         dbc.Row(
             dbc.Col(
@@ -216,7 +197,6 @@ layout = html.Div(
                         _metric_bars_section(),
                         _timeseries_section(),
                         _distributions_section(),
-                        _config_section(),
                     ],
                 ),
                 className="page-div pt-3",
@@ -233,79 +213,79 @@ layout = html.Div(
 
 @callback(
     Output("ma-store", "data"),
-    Input("ma-init", "data"),
+    Input("ma-machine", "value"),
 )
-def load_store(_: bool) -> dict | None:
-    """Load MLflow runs and artifact data into the store."""
-    runs_df = load_mlflow_runs()
-    artifacts_df = load_artifacts_csv()
+def load_store(machine_id: str | None) -> dict | None:
+    """Load SMD artifact CSV into the store (falls back to raw data for features)."""
+    if not machine_id:
+        return {"error": "No machine selected."}
 
-    if runs_df is None and artifacts_df is None:
-        return {"error": "No MLflow runs or artifact data found."}
+    # Always derive features from raw SMD data so the dropdown is populated
+    raw = load_smd_train_test(machine_id)
+    raw_features = list(raw[0].columns) if raw else []
 
-    # Discover models from artifacts
-    artifact_models = (
-        discover_models_from_artifacts(artifacts_df) if artifacts_df is not None else []
-    )
+    df = load_smd_results(machine_id)
+    if df is None:
+        # No artifacts yet — return features only, no models
+        return {
+            "features": raw_features,
+            "models": [],
+            "color_map": {},
+            "machine_id": machine_id,
+            "error": "No model results yet. Run the pipeline first.",
+        }
 
-    # Discover models from MLflow
-    mlflow_models = sorted(runs_df["model_name"].unique().tolist()) if runs_df is not None else []
+    models = discover_smd_models(df)
+    features = discover_smd_features(df) or raw_features
 
-    # Union of both sources
-    all_models = sorted(set(artifact_models + mlflow_models))
-    if not all_models:
-        return {"error": "No models found in MLflow or artifacts."}
+    color_map = build_color_map(models) if models else {}
 
-    color_map = build_color_map(all_models)
-
-    store: dict = {
-        "models": all_models,
+    return {
+        "artifacts": df.to_json(orient="split"),
+        "models": models,
+        "features": features,
         "color_map": color_map,
-        "error": "",
+        "machine_id": machine_id,
+        "error": "" if models else "No model results yet. Run the pipeline first.",
     }
-
-    if runs_df is not None:
-        store["runs"] = runs_df.to_dict("records")
-        store["runs_columns"] = list(runs_df.columns)
-
-    if artifacts_df is not None:
-        store["artifacts"] = artifacts_df.to_json(date_format="iso", orient="split")
-        store["artifact_models"] = artifact_models
-
-    store["data_params"] = load_data_run_params()
-
-    return store
 
 
 @callback(
+    Output("ma-feature", "options"),
+    Output("ma-feature", "value"),
     Output("ma-models", "options"),
     Output("ma-models", "value"),
     Output("ma-models-status", "children"),
     Input("ma-store", "data"),
 )
-def update_model_checklist(store: dict | None) -> tuple[list, list, html.Span | None]:
-    """Build the model checklist with colored dots."""
+def update_selectors(
+    store: dict | None,
+) -> tuple[list, str | None, list, list, html.Span | None]:
+    """Populate feature dropdown and model checklist from store."""
     if not store:
         hint = html.Span(
             [html.I(className="bi bi-question-circle me-1"), "Loading..."],
             className="text-muted-light small",
         )
-        return [], [], hint
+        return [], None, [], [], hint
 
-    error = store.get("error", "")
-    if error:
-        hint = html.Span(
-            [html.I(className="bi bi-question-circle me-1"), "No data found"],
-            title=error,
-            className="text-muted-light small",
-            style={"cursor": "help"},
-        )
-        return [], [], hint
+    features = store.get("features", [])
+    feat_options = [{"label": f, "value": f} for f in features]
+    feat_default = features[0] if features else None
 
     models = store.get("models", [])
-    color_map = store.get("color_map", {})
+    error = store.get("error", "")
 
-    options = [
+    if not models:
+        hint = html.Span(
+            [html.I(className="bi bi-info-circle me-1"), "No results yet."],
+            className="text-muted-light small",
+            title=error or "Run the multivariate pipeline to generate model artifacts.",
+        )
+        return feat_options, feat_default, [], [], hint
+
+    color_map = store.get("color_map", {})
+    model_options = [
         {
             "label": html.Span(
                 [
@@ -327,7 +307,7 @@ def update_model_checklist(store: dict | None) -> tuple[list, list, html.Span | 
         for m in models
     ]
 
-    return options, models, None  # all selected by default
+    return feat_options, feat_default, model_options, models, None
 
 
 @callback(
@@ -336,89 +316,105 @@ def update_model_checklist(store: dict | None) -> tuple[list, list, html.Span | 
     Output("ma-bar-2", "figure"),
     Output("ma-bar-3", "figure"),
     Input("ma-store", "data"),
-    Input("ma-metric-tabs", "value"),
     Input("ma-models", "value"),
 )
 def update_metric_bars(
-    store: dict | None, metric_level: str, selected: list[str]
+    store: dict | None, selected: list[str]
 ) -> tuple[go.Figure, go.Figure, go.Figure, go.Figure]:
-    """Render 4 metric bar charts."""
-    empty = _empty_fig("No data")
-    if not store or store.get("error") or "runs" not in store:
-        msg = store.get("error", "No MLflow data") if store else "Loading..."
-        return (
-            _empty_fig(msg),
-            _empty_fig(msg),
-            _empty_fig(msg),
-            _empty_fig(msg),
-        )
+    """Compute and render metric bar charts from the artifact CSV."""
+    if not store or store.get("error") or "artifacts" not in store:
+        return tuple(_empty_fig("No results yet.") for _ in range(4))
 
-    import pandas as pd
-
-    runs_df = pd.DataFrame(store["runs"])
-    color_map = store.get("color_map", {})
+    df = pd.read_json(io.StringIO(store["artifacts"]), orient="split")
     models = store.get("models", [])
+    color_map = store.get("color_map", {})
     selected = enforce_min_one(selected, models)
 
-    metrics = POINT_METRICS if metric_level == "point" else RANGE_METRICS
+    if "is_anomaly" not in df.columns:
+        return tuple(_empty_fig("No ground truth") for _ in range(4))
+
+    y_true = df["is_anomaly"].astype(int).values
+
+    # Compute metrics per selected model
+    metric_names = ["F1", "Precision", "Recall", "AUC-ROC"]
+    rows: list[dict] = []
+    for model in selected:
+        score_col = f"{model}_score"
+        anom_col = f"{model}_is_anomaly"
+        if anom_col not in df.columns:
+            continue
+
+        y_pred = df[anom_col].astype(int).values
+        prec, rec, f1, _ = precision_recall_fscore_support(
+            y_true, y_pred, average="binary", zero_division=0,
+        )
+
+        auc = None
+        if score_col in df.columns:
+            scores = pd.to_numeric(df[score_col], errors="coerce").fillna(0).values
+            if len(np.unique(y_true)) > 1:
+                try:
+                    auc = roc_auc_score(y_true, scores)
+                except ValueError:
+                    pass
+
+        rows.append({
+            "model": model,
+            "F1": f1,
+            "Precision": prec,
+            "Recall": rec,
+            "AUC-ROC": auc if auc is not None else 0.0,
+        })
+
+    if not rows:
+        return tuple(_empty_fig("No model data") for _ in range(4))
+
+    metrics_df = pd.DataFrame(rows)
 
     figs = []
-    for col, display_name in metrics:
-        if col not in runs_df.columns:
-            figs.append(_empty_fig(f"{display_name}: N/A"))
-            continue
-
-        subset = runs_df[runs_df["model_name"].isin(selected)].copy()
-        subset = subset[["model_name", col]]
-
-        if subset.empty:
-            figs.append(_empty_fig(f"{display_name}: No data"))
-            continue
-
-        # Sort by value but keep models with NaN at the start
-        subset = subset.sort_values(col, ascending=True, na_position="first")
-
+    for metric in metric_names:
+        subset = metrics_df[["model", metric]].sort_values(metric, ascending=True)
         fig = px.bar(
             subset,
-            x="model_name",
-            y=col,
-            color="model_name",
+            x="model",
+            y=metric,
+            color="model",
             color_discrete_map=color_map,
-            category_orders={"model_name": subset["model_name"].tolist()},
-            labels={"model_name": "", col: display_name},
-            title=display_name,
+            category_orders={"model": subset["model"].tolist()},
+            labels={"model": "", metric: metric},
+            title=metric,
         )
-        fig.update_layout(**_DARK_LAYOUT, showlegend=False)
-        fig.update_layout(
-            bargap=0.3,
-            yaxis_title=display_name,
-        )
+        fig.update_layout(**_DARK_LAYOUT, showlegend=False, bargap=0.3)
         figs.append(fig)
 
-    while len(figs) < 4:
-        figs.append(empty)
-
-    return tuple(figs)  # type: ignore[return-value]
+    return tuple(figs)
 
 
 @callback(
     Output("ma-timeseries", "figure"),
     Input("ma-store", "data"),
     Input("ma-models", "value"),
+    Input("ma-feature", "value"),
 )
-def update_timeseries(store: dict | None, selected: list[str]) -> go.Figure:
-    """Render detection results: value + anomaly markers (top) and scores (bottom)."""
+def update_timeseries(
+    store: dict | None, selected: list[str], feature: str | None,
+) -> go.Figure:
+    """Render detection results: feature + anomaly markers (top) and scores (bottom)."""
     if not store or store.get("error") or "artifacts" not in store:
-        msg = store.get("error", "No artifact data") if store else "Loading..."
-        return _empty_fig(msg)
-
-    import pandas as pd
+        return _empty_fig("No results yet.")
 
     df = pd.read_json(io.StringIO(store["artifacts"]), orient="split")
-    artifact_models = store.get("artifact_models", [])
-    color_map = store.get("color_map", {})
     models = store.get("models", [])
+    color_map = store.get("color_map", {})
     selected = enforce_min_one(selected, models)
+
+    if not feature or feature not in df.columns:
+        features = store.get("features", [])
+        feature = features[0] if features else None
+    if not feature:
+        return _empty_fig("No features available")
+
+    x_axis = list(range(len(df)))
 
     fig = make_subplots(
         rows=2,
@@ -426,27 +422,33 @@ def update_timeseries(store: dict | None, selected: list[str]) -> go.Figure:
         shared_xaxes=True,
         vertical_spacing=0.06,
         row_heights=[0.6, 0.4],
-        subplot_titles=["Time Series & Anomalies", "Anomaly Scores"],
+        subplot_titles=[f"{feature} & Anomalies", "Anomaly Scores"],
     )
 
-    # --- Top subplot: original time series + anomaly markers ---
+    # Top subplot: selected feature line
     fig.add_trace(
         go.Scatter(
-            x=df["timestamp"],
-            y=df["value"],
+            x=x_axis,
+            y=df[feature],
             mode="lines",
-            name="Value",
+            name=feature,
             line={"color": "#ffffff", "width": 1},
         ),
         row=1,
         col=1,
     )
 
+    # Ground truth anomaly zones
+    if "is_anomaly" in df.columns:
+        add_anomaly_zones(
+            fig, df["is_anomaly"].astype(bool),
+            label="Ground Truth", row=1, col=1,
+        )
+
+    # Per-model anomaly markers
     for model in selected:
-        if model not in artifact_models:
-            continue
-        score_col = f"{model}_score"
         anom_col = f"{model}_is_anomaly"
+        score_col = f"{model}_score"
         if anom_col not in df.columns:
             continue
 
@@ -455,17 +457,16 @@ def update_timeseries(store: dict | None, selected: list[str]) -> go.Figure:
         if not anom_mask.any():
             continue
 
-        anom_pts = df[anom_mask].copy()
-
+        anom_idx = [i for i, v in enumerate(anom_mask) if v]
         hover = None
         if score_col in df.columns:
-            scores = pd.to_numeric(anom_pts[score_col], errors="coerce")
-            hover = [f"Score: {s:.4g}" if pd.notna(s) else "" for s in scores]
+            scores = pd.to_numeric(df[score_col], errors="coerce")
+            hover = [f"Score: {scores.iloc[i]:.4g}" for i in anom_idx]
 
         fig.add_trace(
             go.Scatter(
-                x=anom_pts["timestamp"],
-                y=anom_pts["value"],
+                x=anom_idx,
+                y=df[feature].iloc[anom_idx],
                 mode="markers",
                 name=model,
                 marker={"color": color, "size": 6, "symbol": "x"},
@@ -479,10 +480,8 @@ def update_timeseries(store: dict | None, selected: list[str]) -> go.Figure:
             col=1,
         )
 
-    # --- Bottom subplot: anomaly score lines ---
+    # Bottom subplot: anomaly score lines
     for model in selected:
-        if model not in artifact_models:
-            continue
         score_col = f"{model}_score"
         if score_col not in df.columns:
             continue
@@ -490,7 +489,7 @@ def update_timeseries(store: dict | None, selected: list[str]) -> go.Figure:
         color = color_map.get(model, "#636efa")
         fig.add_trace(
             go.Scatter(
-                x=df["timestamp"],
+                x=x_axis,
                 y=pd.to_numeric(df[score_col], errors="coerce"),
                 mode="lines",
                 name=f"{model} (score)",
@@ -512,10 +511,10 @@ def update_timeseries(store: dict | None, selected: list[str]) -> go.Figure:
     )
     fig.update_xaxes(gridcolor="#333")
     fig.update_yaxes(gridcolor="#333")
-    fig.update_yaxes(title_text="Value", row=1, col=1)
+    fig.update_xaxes(title_text="Timestep", row=2, col=1)
+    fig.update_yaxes(title_text=feature, row=1, col=1)
     fig.update_yaxes(title_text="Anomaly Score", row=2, col=1)
 
-    # Style subplot titles
     for ann in fig.layout.annotations:
         ann.update(font_color="#aaaaaa", font_size=12)
 
@@ -530,20 +529,15 @@ def update_timeseries(store: dict | None, selected: list[str]) -> go.Figure:
 def update_distributions(store: dict | None, selected: list[str]) -> go.Figure:
     """Render overlaid histograms of anomaly scores per model."""
     if not store or store.get("error") or "artifacts" not in store:
-        return _empty_fig("No artifact data")
-
-    import pandas as pd
+        return _empty_fig("No data")
 
     df = pd.read_json(io.StringIO(store["artifacts"]), orient="split")
-    artifact_models = store.get("artifact_models", [])
-    color_map = store.get("color_map", {})
     models = store.get("models", [])
+    color_map = store.get("color_map", {})
     selected = enforce_min_one(selected, models)
 
     fig = go.Figure()
     for model in selected:
-        if model not in artifact_models:
-            continue
         score_col = f"{model}_score"
         if score_col not in df.columns:
             continue
@@ -572,101 +566,3 @@ def update_distributions(store: dict | None, selected: list[str]) -> go.Figure:
     )
 
     return fig
-
-
-@callback(
-    Output("ma-config-table", "children"),
-    Input("ma-store", "data"),
-    Input("ma-models", "value"),
-)
-def update_config_table(store: dict | None, selected: list[str]) -> html.Div:
-    """Render a parameter comparison table from MLflow run params."""
-    if not store or store.get("error") or "runs" not in store:
-        msg = store.get("error", "No MLflow data") if store else "Loading..."
-        return html.Span(
-            [html.I(className="bi bi-question-circle me-1"), "No data"],
-            title=msg,
-            className="text-muted-light small",
-            style={"cursor": "help"},
-        )
-
-    import pandas as pd
-
-    runs_df = pd.DataFrame(store["runs"])
-    all_models = store.get("models", [])
-    selected = enforce_min_one(selected, all_models)
-
-    # Filter to selected models
-    runs_df = runs_df[runs_df["model_name"].isin(selected)]
-
-    # Extract param columns (params.*)
-    param_cols = [c for c in runs_df.columns if c.startswith("params.")]
-
-    # Also include key metrics
-    extra_cols = ["metrics.fit_time_seconds", "metrics.anomaly_rate", "metrics.test_size"]
-    display_cols = param_cols + [c for c in extra_cols if c in runs_df.columns]
-
-    if not display_cols:
-        return html.Span("No parameters available.", className="text-muted-light")
-
-    # Build a transposed table: rows = parameters, columns = models
-    models = sorted(runs_df["model_name"].unique().tolist())
-
-    # Collect data-level params to avoid duplicating them in the model section
-    data_params = store.get("data_params", {})
-    data_param_keys = set(data_params.keys())
-
-    rows = []
-    for col in display_cols:
-        # Skip columns covered by data_params (appended at the end)
-        if col in data_param_keys:
-            continue
-        # Clean up display name
-        display = col.replace("params.", "").replace("metrics.", "")
-        values = []
-        for model in models:
-            model_row = runs_df[runs_df["model_name"] == model]
-            if model_row.empty or col not in model_row.columns:
-                values.append("—")
-            else:
-                val = model_row.iloc[0][col]
-                if pd.isna(val):
-                    values.append("—")
-                elif isinstance(val, float):
-                    values.append(f"{val:.4g}")
-                else:
-                    values.append(str(val))
-
-        # Skip rows where all values are "—"
-        if all(v == "—" for v in values):
-            continue
-        rows.append((display, values))
-
-    # Append dataset-level params at the end (shared across all models)
-    for key, val in data_params.items():
-        display = key.replace("params.", "")
-        rows.append((display, [val] * len(models)))
-
-    if not rows:
-        return html.Span("No parameters available.", className="text-muted-light")
-
-    header = html.Thead(
-        html.Tr(
-            [html.Th("Parameter", className="config-table-th")]
-            + [html.Th(m, className="config-table-th") for m in models]
-        )
-    )
-    body = html.Tbody(
-        [
-            html.Tr(
-                [html.Td(display, className="config-table-td")]
-                + [html.Td(v, className="config-table-td") for v in values]
-            )
-            for display, values in rows
-        ]
-    )
-
-    return html.Table(
-        [header, body],
-        className="config-table",
-    )
