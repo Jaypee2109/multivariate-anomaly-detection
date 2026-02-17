@@ -58,7 +58,7 @@ _DEFAULT_MACHINE = _MACHINES[0]["value"] if _MACHINES else None
 
 
 def _model_selector() -> dbc.Container:
-    """Machine selector + model checklist + feature dropdown."""
+    """Machine selector + model checklist."""
     machines = _MACHINES
     return dbc.Container(
         [
@@ -76,18 +76,6 @@ def _model_selector() -> dbc.Container:
                             ),
                         ],
                         md=3,
-                    ),
-                    dbc.Col(
-                        [
-                            html.Label("Feature", className="small text-muted-light"),
-                            dcc.Dropdown(
-                                id="ma-feature",
-                                options=[],
-                                value=None,
-                                clearable=False,
-                            ),
-                        ],
-                        md=2,
                     ),
                     dbc.Col(
                         [
@@ -147,7 +135,25 @@ def _metric_bars_section() -> dbc.Container:
 def _timeseries_section() -> dbc.Container:
     return dbc.Container(
         [
-            html.H3("Detection Results", className="mb-3"),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        html.H3("Detection Results", className="mb-0"),
+                        width="auto",
+                    ),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            id="ma-feature",
+                            options=[],
+                            value=None,
+                            clearable=False,
+                            style={"minWidth": "100px"},
+                        ),
+                        width="auto",
+                    ),
+                ],
+                className="align-items-center g-3 mb-3",
+            ),
             dcc.Loading(
                 dcc.Graph(
                     id="ma-timeseries",
@@ -251,23 +257,23 @@ def load_store(machine_id: str | None) -> dict | None:
 
 
 @callback(
-    Output("ma-feature", "options"),
-    Output("ma-feature", "value"),
     Output("ma-models", "options"),
     Output("ma-models", "value"),
     Output("ma-models-status", "children"),
+    Output("ma-feature", "options"),
+    Output("ma-feature", "value"),
     Input("ma-store", "data"),
 )
 def update_selectors(
     store: dict | None,
-) -> tuple[list, str | None, list, list, html.Span | None]:
-    """Populate feature dropdown and model checklist from store."""
+) -> tuple[list, list, html.Span | None, list, str | None]:
+    """Populate model checklist and feature dropdown from store."""
     if not store:
         hint = html.Span(
             [html.I(className="bi bi-question-circle me-1"), "Loading..."],
             className="text-muted-light small",
         )
-        return [], None, [], [], hint
+        return [], [], hint, [], None
 
     features = store.get("features", [])
     feat_options = [{"label": f, "value": f} for f in features]
@@ -282,7 +288,7 @@ def update_selectors(
             className="text-muted-light small",
             title=error or "Run the multivariate pipeline to generate model artifacts.",
         )
-        return feat_options, feat_default, [], [], hint
+        return [], [], hint, feat_options, feat_default
 
     color_map = store.get("color_map", {})
     model_options = [
@@ -307,7 +313,7 @@ def update_selectors(
         for m in models
     ]
 
-    return feat_options, feat_default, model_options, models, None
+    return model_options, models, None, feat_options, feat_default
 
 
 @callback(
@@ -370,17 +376,18 @@ def update_metric_bars(
         return tuple(_empty_fig("No model data") for _ in range(4))
 
     metrics_df = pd.DataFrame(rows)
+    # Consistent model order across all charts (sorted by F1 descending)
+    model_order = metrics_df.sort_values("F1", ascending=False)["model"].tolist()
 
     figs = []
     for metric in metric_names:
-        subset = metrics_df[["model", metric]].sort_values(metric, ascending=True)
         fig = px.bar(
-            subset,
+            metrics_df,
             x="model",
             y=metric,
             color="model",
             color_discrete_map=color_map,
-            category_orders={"model": subset["model"].tolist()},
+            category_orders={"model": model_order},
             labels={"model": "", metric: metric},
             title=metric,
         )
