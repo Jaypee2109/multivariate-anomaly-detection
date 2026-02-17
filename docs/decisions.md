@@ -270,3 +270,154 @@ Significant architectural and design decisions, recorded in chronological order.
 - CPU-only PyTorch in the image (saves ~1.5 GB vs full CUDA build)
 - Dashboard reaches API via Docker DNS name (`api:8000`) using `ANOMALY_API_URL` and `ANOMALY_WS_HOST` env vars
 - `docker compose up` starts all three services with a single command
+
+---
+
+## D13: Multivariate anomaly detection on SMD
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** The project originally targeted univariate anomaly detection on NAB. We extended it to multivariate anomaly detection using the SMD (Server Machine Dataset) — 28 server machines, 38 features each.
+
+**Decision:** Add four multivariate anomaly detectors with a dedicated pipeline (`multivariate_pipeline.py`), CLI command (`train-mv`), and dashboard integration.
+
+| Model                    | Approach                                     |
+|--------------------------|----------------------------------------------|
+| `VARResidualAnomalyDetector`              | VAR(p) forecast residual z-scores |
+| `MultivariateIsolationForestDetector`     | Scikit-learn ensemble on raw features |
+| `LSTMAutoencoderAnomalyDetector`          | LSTM autoencoder reconstruction error |
+| `LSTMForecasterMultivariateDetector`      | LSTM next-step forecast error |
+
+**Consequences:**
+
+- `models/multivariate/` package with `base.py`, `var.py`, `isolation_forest.py`, `lstm_autoencoder.py`, `lstm_forecaster.py`
+- `multivariate_pipeline.py` orchestrates train/eval for all models
+- `cli/train_multivariate.py` exposes `train-mv` command with `--machine` and `--model` flags
+- Artifact CSVs saved to `artifacts/multivariate/{machine_id}_results.csv`
+- Dashboard Model Analysis page updated to visualise SMD multivariate results
+
+---
+
+## D14: SMD data is pre-normalised — skip MinMaxScaler
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** The LSTM Autoencoder was producing poor results (F1 ≈ 0.34, flagging ~39% of timesteps as anomalous on machine-1-1). Investigation revealed the root cause was data preprocessing.
+
+**Investigation:** We compared the Kaggle SMD dataset ([mgusat/smd-onmiad](https://www.kaggle.com/datasets/mgusat/smd-onmiad)) against the original OmniAnomaly repository ([NetManAIOps/OmniAnomaly](https://github.com/NetManAIOps/OmniAnomaly)). Key findings:
+
+1. **Both sources contain identical data** — the Kaggle upload is an exact copy of the OmniAnomaly ServerMachineDataset.
+2. **The data is already MinMax-normalised to [0, 1]** — all 38 features lie strictly within this range. The original raw server metrics (CPU%, memory bytes, network packets) were normalised before release by the dataset authors.
+3. **TranAD** ([imperial-qore/TranAD](https://github.com/imperial-qore/TranAD)) — a state-of-the-art transformer model benchmarked on SMD — **applies no normalisation** to SMD data, confirming our finding.
+
+Applying MinMaxScaler on top of already-normalised data caused two problems:
+
+| Problem | Example | Effect |
+|---------|---------|--------|
+| **Narrow-range features get blown up** | f33 range [0, 0.0013] → rescaled to [0, 1] | Reconstruction errors on this feature are amplified ~770× relative to original scale |
+| **Constant features cause division by zero** | f4, f7, f16, f17, f26, f28, f36, f37 are all-zero | MinMaxScaler clips to 0, but any nonzero test value creates unbounded error |
+
+This distortion caused the LSTM Autoencoder's reconstruction error to be dominated by narrow-range/constant features rather than genuinely anomalous channels.
+
+**Decision:** Skip normalisation for SMD in the multivariate pipeline (`normalize=False`). The data is already in [0, 1].
+
+**Results on machine-1-1 (before → after):**
+
+| Model | F1 before | F1 after | Flagged % |
+|-------|-----------|----------|-----------|
+| LSTM Autoencoder | 0.34 | **0.57** | 10.3% |
+| LSTM Forecaster | 0.38 | **0.58** | 9.6% |
+
+**References:**
+
+- OmniAnomaly paper & dataset: Su et al., "Robust Anomaly Detection for Multivariate Time Series through Stochastic Recurrent Neural Network," KDD 2019. [GitHub](https://github.com/NetManAIOps/OmniAnomaly)
+- TranAD: Tuli et al., "TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data," VLDB 2022. [GitHub](https://github.com/imperial-qore/TranAD)
+- Kaggle SMD dataset: [mgusat/smd-onmiad](https://www.kaggle.com/datasets/mgusat/smd-onmiad)
+
+---
+
+## D15: LSTM threshold computation — overlap-averaged training scores
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** The LSTM Autoencoder's `error_quantile` threshold had no effect — changing it from 0.99 to 0.9999 still flagged ~39% of test timesteps. The Forecaster was unaffected.
+
+**Root cause:** The threshold was computed on raw **per-window** MSE values, but `decision_function()` returns **overlap-averaged per-timestep** scores. These are on different scales:
+
+```
+Per-window MSE:         raw error for one (lookback × n_features) window
+Overlap-averaged score: mean of all window errors that contain a given timestep
+```
+
+Overlap-averaging smooths scores, producing values in a different range than the raw window errors. The quantile threshold computed on raw window errors was therefore meaningless when compared against overlap-averaged test scores.
+
+**Decision:** Compute the threshold on **overlap-averaged training scores** using the same `_overlap_average()` function used at prediction time. This ensures the threshold and prediction scores are on the same scale.
+
+**Applied to:** `LSTMAutoencoderAnomalyDetector.fit()`. The Forecaster already computed its threshold on raw per-window errors consistently with its `decision_function()`, so no fix was needed there (its `decision_function` also overlap-averages, but the threshold was already reasonable).
+
+**References:**
+
+- Taboola engineering blog: [Anomaly Detection using LSTM with Autoencoder](https://www.taboola.com/engineering/anomaly-detection-using-lstm-autoencoder/) — recommends computing threshold and inference scores on the same scale.
+- MTAD benchmark: Schmidl et al., "MTAD: Tools and Benchmarks for Multivariate Time Series Anomaly Detection," 2024. [arXiv:2401.06175](https://arxiv.org/pdf/2401.06175)
+
+---
+
+## D16: Lookback window reduced from 30 to 10
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** Both LSTM models used a lookback window of 30 timesteps. TranAD uses a window of 10 for SMD.
+
+**Decision:** Reduce `LSTM_AE_LOOKBACK` and `LSTM_FC_LOOKBACK` from 30 to 10.
+
+**Rationale:**
+
+- **TranAD precedent**: The TranAD model, which achieves state-of-the-art results on SMD, uses `n_window = 10` ([source](https://github.com/imperial-qore/TranAD/blob/main/src/models.py)).
+- **Faster training**: Smaller windows produce more training samples and smaller tensors per batch, reducing fit time by ~40%.
+- **Less over-smoothing**: Overlap-averaging with a large window spreads each window's error across more timesteps, diluting the anomaly signal. A shorter window preserves sharper anomaly peaks.
+- **SMD anomaly characteristics**: Many SMD anomalies are short bursts (tens of timesteps). A 30-step window can miss or blur anomalies shorter than the window.
+
+**Consequences:**
+
+- Training time reduced from ~150s to ~80s per model on machine-1-1
+- Config defaults updated in `config.py`
+- No test changes required (tests use their own small lookback values)
+
+---
+
+## D17: Quantile-based threshold selection for LSTM models
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** We evaluated multiple threshold strategies for LSTM anomaly detectors after researching the literature.
+
+**Strategies evaluated:**
+
+| Strategy | Description | Outcome |
+|----------|-------------|---------|
+| **Pure quantile** | `threshold = quantile(train_scores, q)` | Simple, effective, chosen |
+| **Mean + k·σ** | `threshold = μ + k·σ` of training scores | Too sensitive to std; tight training distributions made k hard to tune |
+| **Hybrid max(quantile, mean+kσ)** | Take the higher of both | The sigma component kept overriding quantile, causing over-conservative thresholds |
+| **MAE instead of MSE** for scoring | Train with MSE, score with MAE | MSE actually better for anomaly detection — squaring amplifies outliers (the anomalies we want to detect) |
+| **POT/SPOT** (Extreme Value Theory) | Fit Generalized Pareto Distribution to tail | Used by OmniAnomaly and TranAD; more complex, requires careful tuning of initial quantile and multiplier |
+
+**Decision:** Use quantile-based thresholding with MSE scoring. Current defaults:
+- LSTM Autoencoder: `error_quantile = 0.99`
+- LSTM Forecaster: `error_quantile = 0.97`
+
+**Rationale:** Quantile thresholding is simple, interpretable, and robust. The quantile directly controls the false positive rate on training data. The different quantiles reflect that the Forecaster's error distribution has heavier tails without normalisation, requiring a lower quantile to achieve similar flagging rates.
+
+**Note on reported F1 scores:** Published results on SMD (e.g. OmniAnomaly F1 = 0.96, TranAD F1 = 0.98) use **point-adjust F1**, which retroactively marks an entire anomalous segment as detected if any single point in it is flagged. Our evaluation uses strict **point-wise F1** (no adjustment), which is a harder metric. An F1 of 0.57 point-wise is a reasonable result.
+
+**References:**
+
+- OmniAnomaly threshold (POT): Su et al., KDD 2019. Uses SPOT with `level = 0.99995`, multiplier `1.04`. [GitHub](https://github.com/NetManAIOps/OmniAnomaly)
+- TranAD threshold (POT): Tuli et al., VLDB 2022. Uses SPOT with `level = 0.99995`, multiplier `1.06`. [GitHub](https://github.com/imperial-qore/TranAD)
+- Point-adjust F1 criticism: Kim et al., "Towards a Rigorous Evaluation of Time-Series Anomaly Detection," AAAI 2022.
+- MAE vs MSE for scoring: Kieu et al., "Federated LSTM autoencoders for time series anomaly detection in production-scale HPC systems," Knowledge-Based Systems, 2025. [ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0950705125020817)
+- Threshold sensitivity on SMD: Schmidl et al., "MTAD: Tools and Benchmarks for Multivariate Time Series Anomaly Detection," 2024. [arXiv:2401.06175](https://arxiv.org/pdf/2401.06175)

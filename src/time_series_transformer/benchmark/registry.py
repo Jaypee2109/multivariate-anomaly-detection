@@ -9,11 +9,16 @@ logger = logging.getLogger(__name__)
 
 # name → callable that returns a fresh model instance
 _REGISTRY: dict[str, Callable] = {}
+_MULTIVARIATE: set[str] = set()
 
 
-def register_model(name: str, factory: Callable) -> None:
+def register_model(
+    name: str, factory: Callable, *, multivariate: bool = False,
+) -> None:
     """Register a model factory under *name*."""
     _REGISTRY[name] = factory
+    if multivariate:
+        _MULTIVARIATE.add(name)
 
 
 def get_factory(name: str) -> Callable:
@@ -30,8 +35,23 @@ def list_models() -> list[str]:
     return list(_REGISTRY)
 
 
+def is_multivariate(name: str) -> bool:
+    """Return *True* if *name* is a multivariate model."""
+    return name in _MULTIVARIATE
+
+
+def list_multivariate_models() -> list[str]:
+    """Return names of all registered multivariate models."""
+    return [m for m in _REGISTRY if m in _MULTIVARIATE]
+
+
+def list_univariate_models() -> list[str]:
+    """Return names of all registered univariate models."""
+    return [m for m in _REGISTRY if m not in _MULTIVARIATE]
+
+
 # ------------------------------------------------------------------
-# Built-in models
+# Built-in univariate models
 # ------------------------------------------------------------------
 
 def _register_defaults() -> None:
@@ -98,4 +118,103 @@ def _register_defaults() -> None:
     )
 
 
+# ------------------------------------------------------------------
+# Built-in multivariate models
+# ------------------------------------------------------------------
+
+def _register_multivariate_defaults() -> None:
+    from time_series_transformer.config import (
+        LSTM_AE_BATCH_SIZE,
+        LSTM_AE_DROPOUT,
+        LSTM_AE_EPOCHS,
+        LSTM_AE_ERROR_QUANTILE,
+        LSTM_AE_HIDDEN_SIZE,
+        LSTM_AE_LATENT_DIM,
+        LSTM_AE_LOOKBACK,
+        LSTM_AE_LR,
+        LSTM_AE_NUM_LAYERS,
+        MULTI_ISO_CONTAMINATION,
+        RANDOM_STATE,
+        VAR_AGGREGATION,
+        VAR_IC,
+        VAR_MAXLAGS,
+        VAR_Z_THRESH,
+    )
+    from time_series_transformer.models.multivariate.isolation_forest import (
+        MultivariateIsolationForestDetector,
+    )
+    from time_series_transformer.models.multivariate.lstm_autoencoder import (
+        LSTMAutoencoderAnomalyDetector,
+    )
+    from time_series_transformer.models.multivariate.var import (
+        VARResidualAnomalyDetector,
+    )
+
+    register_model(
+        "var",
+        lambda: VARResidualAnomalyDetector(
+            maxlags=VAR_MAXLAGS,
+            ic=VAR_IC,
+            z_thresh=VAR_Z_THRESH,
+            aggregation=VAR_AGGREGATION,
+        ),
+        multivariate=True,
+    )
+    register_model(
+        "multi_isolation_forest",
+        lambda: MultivariateIsolationForestDetector(
+            contamination=MULTI_ISO_CONTAMINATION,
+            random_state=RANDOM_STATE,
+        ),
+        multivariate=True,
+    )
+    register_model(
+        "lstm_autoencoder",
+        lambda: LSTMAutoencoderAnomalyDetector(
+            lookback=LSTM_AE_LOOKBACK,
+            hidden_size=LSTM_AE_HIDDEN_SIZE,
+            latent_dim=LSTM_AE_LATENT_DIM,
+            num_layers=LSTM_AE_NUM_LAYERS,
+            dropout=LSTM_AE_DROPOUT,
+            batch_size=LSTM_AE_BATCH_SIZE,
+            lr=LSTM_AE_LR,
+            epochs=LSTM_AE_EPOCHS,
+            error_quantile=LSTM_AE_ERROR_QUANTILE,
+            device="auto",
+        ),
+        multivariate=True,
+    )
+
+    from time_series_transformer.config import (
+        LSTM_FC_BATCH_SIZE,
+        LSTM_FC_DROPOUT,
+        LSTM_FC_EPOCHS,
+        LSTM_FC_ERROR_QUANTILE,
+        LSTM_FC_HIDDEN_SIZE,
+        LSTM_FC_LOOKBACK,
+        LSTM_FC_LR,
+        LSTM_FC_NUM_LAYERS,
+    )
+    from time_series_transformer.models.multivariate.lstm_forecaster import (
+        LSTMForecasterMultivariateDetector,
+    )
+
+    register_model(
+        "lstm_forecaster",
+        lambda: LSTMForecasterMultivariateDetector(
+            lookback=LSTM_FC_LOOKBACK,
+            hidden_size=LSTM_FC_HIDDEN_SIZE,
+            num_layers=LSTM_FC_NUM_LAYERS,
+            dropout=LSTM_FC_DROPOUT,
+            batch_size=LSTM_FC_BATCH_SIZE,
+            lr=LSTM_FC_LR,
+            epochs=LSTM_FC_EPOCHS,
+            error_quantile=LSTM_FC_ERROR_QUANTILE,
+            device="auto",
+        ),
+        multivariate=True,
+    )
+
+
 _register_defaults()
+_register_multivariate_defaults()

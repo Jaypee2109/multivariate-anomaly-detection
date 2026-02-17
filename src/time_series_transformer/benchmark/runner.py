@@ -22,8 +22,8 @@ from time_series_transformer.evaluation import (
 )
 from time_series_transformer.split import train_test_split_series
 
-from .dataset_spec import DatasetSpec
-from .registry import get_factory, list_models
+from .dataset_spec import DatasetSpec, MultivariateDatasetSpec
+from .registry import get_factory, is_multivariate, list_models
 from .results import BenchmarkResult, ResultsCollector
 
 logger = logging.getLogger(__name__)
@@ -41,8 +41,10 @@ class BenchmarkRunner:
 
     Parameters
     ----------
-    datasets : list[DatasetSpec]
-        Datasets to evaluate on.
+    datasets : list[DatasetSpec | MultivariateDatasetSpec]
+        Datasets to evaluate on.  Univariate models run on
+        :class:`DatasetSpec`, multivariate models run on
+        :class:`MultivariateDatasetSpec`.
     model_names : list[str] | None
         Subset of registered model names (default: all).
     log_to_mlflow : bool
@@ -55,7 +57,7 @@ class BenchmarkRunner:
 
     def __init__(
         self,
-        datasets: list[DatasetSpec],
+        datasets: list[DatasetSpec | MultivariateDatasetSpec],
         model_names: list[str] | None = None,
         log_to_mlflow: bool = False,
         train_ratio: float = TRAIN_RATIO,
@@ -117,21 +119,31 @@ class BenchmarkRunner:
         """Execute the full benchmark and return collected results."""
         _seed_everything(self.random_state)
 
-        total = len(self.datasets) * len(self.model_names)
+        # Build list of (dataset, model_name) pairs, matching model type to
+        # dataset type (univariate ↔ DatasetSpec, multivariate ↔ MultivariateDatasetSpec).
+        pairs: list[tuple] = []
+        for ds in self.datasets:
+            if isinstance(ds, MultivariateDatasetSpec):
+                applicable = [m for m in self.model_names if is_multivariate(m)]
+            else:
+                applicable = [m for m in self.model_names if not is_multivariate(m)]
+            for model_name in applicable:
+                pairs.append((ds, model_name))
+
+        total = len(pairs)
         logger.info(
-            "Starting benchmark: %d dataset(s) x %d model(s) = %d run(s)",
+            "Starting benchmark: %d dataset(s), %d run(s) total",
             len(self.datasets),
-            len(self.model_names),
             total,
         )
 
-        idx = 0
-        for ds in self.datasets:
-            for model_name in self.model_names:
-                idx += 1
-                logger.info("[%d/%d] %s on %s", idx, total, model_name, ds.name)
+        for idx, (ds, model_name) in enumerate(pairs, 1):
+            logger.info("[%d/%d] %s on %s", idx, total, model_name, ds.name)
+            if isinstance(ds, MultivariateDatasetSpec):
+                result = self._run_single_multivariate(ds, model_name)
+            else:
                 result = self._run_single(ds, model_name)
-                self.collector.add(result)
+            self.collector.add(result)
 
         ok = sum(r.success for r in self.collector.results)
         logger.info("Benchmark complete: %d/%d succeeded", ok, total)
@@ -255,6 +267,87 @@ class BenchmarkRunner:
             "test_size": len(y_test),
         })
         self._mlflow_fns["params"](model_name, model)
+
+    def _run_single_multivariate(
+        self, ds: MultivariateDatasetSpec, model_name: str,
+    ) -> BenchmarkResult:
+        try:
+            from time_series_transformer.data_pipeline.smd_loading import (
+                load_smd_machine,
+            )
+
+            machine_data = load_smd_machine(
+                ds.machine_id, base_dir=ds.base_dir, normalize=ds.normalize,
+            )
+            X_train = machine_data.train_df
+            X_test = machine_data.test_df
+            y_true = machine_data.test_labels
+
+            model = get_factory(model_name)()
+
+            ctx = (
+                self._mlflow.start_run(run_name=f"{model_name} — {ds.name}")
+                if self._mlflow
+                else nullcontext()
+            )
+
+            with ctx:
+                t0 = time.time()
+                model.fit(X_train)
+                fit_time = time.time() - t0
+
+                t0 = time.time()
+                scores = model.decision_function(X_test)
+                anomalies = model.predict(X_test)
+                predict_time = time.time() - t0
+
+                n_test = len(X_test)
+                n_anom = int(anomalies.astype(bool).sum())
+                anom_rate = n_anom / n_test if n_test > 0 else 0.0
+
+                pm = compute_point_metrics(
+                    y_true=y_true, y_pred=anomalies, scores=scores,
+                )
+                rm = compute_range_f1_from_labels(
+                    y_true=y_true, y_pred=anomalies,
+                )
+
+                self._log_mlflow_metrics(
+                    fit_time, predict_time, n_test, n_anom, pm, rm,
+                )
+
+                return BenchmarkResult(
+                    dataset_name=ds.name,
+                    model_name=model_name,
+                    success=True,
+                    fit_time_seconds=fit_time,
+                    predict_time_seconds=predict_time,
+                    test_size=n_test,
+                    n_anomalies_flagged=n_anom,
+                    anomaly_rate=anom_rate,
+                    point_precision=pm.precision,
+                    point_recall=pm.recall,
+                    point_f1=pm.f1,
+                    point_auc_roc=pm.auc_roc,
+                    point_auc_pr=pm.auc_pr,
+                    range_precision=rm.precision,
+                    range_recall=rm.recall,
+                    range_f1=rm.f1,
+                    n_gt_ranges=rm.n_gt_ranges,
+                    n_pred_ranges=rm.n_pred_ranges,
+                    n_tp_ranges=rm.n_tp_ranges,
+                )
+
+        except Exception as e:
+            logger.error(
+                "FAILED %s on %s: %s", model_name, ds.name, e, exc_info=True,
+            )
+            return BenchmarkResult(
+                dataset_name=ds.name,
+                model_name=model_name,
+                success=False,
+                error_message=str(e),
+            )
 
     def _log_mlflow_metrics(self, fit_time, predict_time, n_test, n_anom, pm, rm) -> None:
         if not self._mlflow:

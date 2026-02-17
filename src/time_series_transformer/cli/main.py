@@ -59,7 +59,9 @@ examples:
   %(prog)s data                           Download & preprocess all datasets
   %(prog)s train --mlflow                 Train baselines with MLflow tracking
   %(prog)s train --labels L --labels-key K --mlflow   Train with ground-truth eval
+  %(prog)s train-mv --machine machine-1-1                  Train multivariate models on SMD
   %(prog)s benchmark --config configs/benchmark_nab.yaml   Benchmark on NAB datasets
+  %(prog)s benchmark --config configs/benchmark_smd.yaml   Benchmark on SMD datasets
   %(prog)s eda --csv path/to/data.csv     Basic EDA on a time series
   %(prog)s eda --anomalies path/to/artifacts.csv   Visualize anomalies
   %(prog)s info --data path/to/data.csv   Inspect a dataset
@@ -88,10 +90,20 @@ examples:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Register command modules
-    from time_series_transformer.cli import benchmark, dashboard, data, eda, info, serve, train
+    from time_series_transformer.cli import (
+        benchmark,
+        dashboard,
+        data,
+        eda,
+        info,
+        serve,
+        train,
+        train_multivariate,
+    )
 
     data.register(subparsers)
     train.register(subparsers)
+    train_multivariate.register(subparsers)
     benchmark.register(subparsers)
     eda.register(subparsers)
     info.register(subparsers)
@@ -148,6 +160,8 @@ examples:
         data.run(args)
     elif args.command == "train":
         train.run(args)
+    elif args.command == "train-mv":
+        train_multivariate.run(args)
     elif args.command == "benchmark":
         benchmark.run(args)
     elif args.command == "eda":

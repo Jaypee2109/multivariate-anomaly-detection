@@ -34,3 +34,23 @@ class DatasetSpec:
             and self.labels_key is not None
             and self.labels_path.exists()
         )
+
+
+@dataclass
+class MultivariateDatasetSpec:
+    """An SMD-style multivariate dataset with pre-split train/test.
+
+    Unlike :class:`DatasetSpec` (single CSV split by ratio), this points to
+    a directory with separate ``train/``, ``test/``, and ``test_label/``
+    sub-directories.
+    """
+
+    name: str
+    machine_id: str
+    base_dir: Path
+    normalize: bool = True
+
+    def has_labels(self) -> bool:
+        """SMD always ships with test labels."""
+        label_path = self.base_dir / "test_label" / f"{self.machine_id}.txt"
+        return label_path.exists()

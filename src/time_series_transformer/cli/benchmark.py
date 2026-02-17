@@ -88,17 +88,21 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 def run(args: argparse.Namespace) -> None:
     from time_series_transformer.benchmark import BenchmarkRunner, DatasetSpec
-    from time_series_transformer.benchmark.registry import list_models
+    from time_series_transformer.benchmark.registry import (
+        is_multivariate,
+        list_models,
+    )
 
     # --list-models
     if args.list_models:
         print("Registered models:")
         for m in list_models():
-            print(f"  - {m}")
+            tag = " (multivariate)" if is_multivariate(m) else ""
+            print(f"  - {m}{tag}")
         return
 
     # Build dataset list
-    datasets: list[DatasetSpec] = []
+    datasets: list = []
 
     if args.config is not None:
         datasets.extend(_load_config(args.config))
@@ -136,20 +140,15 @@ def run(args: argparse.Namespace) -> None:
 # ------------------------------------------------------------------
 
 
-def _load_config(config_path: Path) -> list["DatasetSpec"]:
+def _load_config(config_path: Path) -> list:
     """Load dataset definitions from a YAML file.
 
-    Expected format::
+    Supports two formats via ``dataset_type``:
 
-        datasets:
-          - name: NAB_nyc_taxi
-            csv: data/raw/nab/realKnownCause/realKnownCause/nyc_taxi.csv
-            labels: data/labels/nab/realKnownCause.json       # optional
-            labels_key: realKnownCause/nyc_taxi.csv            # optional
-
-    Paths are resolved relative to the project root.
+    * ``nab`` (default) — univariate CSVs with optional NAB labels.
+    * ``smd`` — multivariate SMD machine datasets (pre-split train/test).
     """
-    from time_series_transformer.benchmark import DatasetSpec
+    from time_series_transformer.benchmark import DatasetSpec, MultivariateDatasetSpec
 
     try:
         import yaml
@@ -168,6 +167,12 @@ def _load_config(config_path: Path) -> list["DatasetSpec"]:
         logger.error("Config must contain a top-level 'datasets' list.")
         sys.exit(1)
 
+    dataset_type = raw.get("dataset_type", "nab")
+
+    if dataset_type == "smd":
+        return _load_smd_config(raw)
+
+    # --- default: NAB / univariate ---
     specs: list[DatasetSpec] = []
     for entry in raw["datasets"]:
         name = entry.get("name")
@@ -200,6 +205,32 @@ def _load_config(config_path: Path) -> list["DatasetSpec"]:
         )
 
     logger.info("Loaded %d dataset(s) from %s", len(specs), config_path)
+    return specs
+
+
+def _load_smd_config(raw: dict) -> list:
+    """Parse an SMD-style benchmark YAML."""
+    from time_series_transformer.benchmark import MultivariateDatasetSpec
+
+    base_dir = _resolve(
+        raw.get("smd_base_dir", "data/raw/smd_onmiad/ServerMachineDataset"),
+    )
+    specs = []
+    for entry in raw["datasets"]:
+        name = entry.get("name")
+        machine_id = entry.get("machine_id")
+        if not name or not machine_id:
+            logger.warning("Skipping entry without 'name' or 'machine_id': %s", entry)
+            continue
+        specs.append(
+            MultivariateDatasetSpec(
+                name=name,
+                machine_id=machine_id,
+                base_dir=base_dir,
+            )
+        )
+
+    logger.info("Loaded %d SMD dataset(s)", len(specs))
     return specs
 
 

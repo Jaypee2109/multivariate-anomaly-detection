@@ -7,6 +7,7 @@ from time_series_transformer.config import (
     KAGGLE_DATASETS,
     PROCESSED_DATA_DIR,
     RAW_DATA_DIR,
+    SMD_RAW_DIR,
     ensure_directories,
 )
 from time_series_transformer.data_pipeline.data_download import download_all_datasets
@@ -16,6 +17,7 @@ from time_series_transformer.data_pipeline.preprocessing import (
     PreprocessingConfig,
     preprocess_dataset_dict,
 )
+from time_series_transformer.data_pipeline.smd_loading import preprocess_smd
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,15 @@ def run_data_pipeline(datasets: Sequence[str] | None = None) -> None:
             continue
 
         logger.info("=== Processing dataset: %s ===", dataset_name)
+
+        # SMD uses its own preprocessing (already normalised, just needs
+        # column names and CSV conversion)
+        if dataset_name == "smd":
+            if SMD_RAW_DIR.exists():
+                preprocess_smd()
+            else:
+                logger.warning("SMD raw directory not found: %s", SMD_RAW_DIR)
+            continue
 
         raw_dict = load_dataset(RAW_DATA_DIR, dataset_name)
 

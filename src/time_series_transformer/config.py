@@ -68,13 +68,19 @@ PACKAGE_ROOT = Path(__file__).resolve().parent  # .../time_series_transformer
 SRC_ROOT = PACKAGE_ROOT.parent  # .../src
 PROJECT_ROOT = SRC_ROOT.parent  # .../Transformer
 
-DATA_DIR = Path(os.environ["DATA_DIR"]) if "DATA_DIR" in os.environ else PROJECT_ROOT / "data"
+DATA_DIR = (
+    Path(os.environ["DATA_DIR"]) if "DATA_DIR" in os.environ else PROJECT_ROOT / "data"
+)
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
-ARTIFACTS_DIR = Path(os.environ["ARTIFACTS_DIR"]) if "ARTIFACTS_DIR" in os.environ else PROJECT_ROOT / "artifacts"
+ARTIFACTS_DIR = (
+    Path(os.environ["ARTIFACTS_DIR"])
+    if "ARTIFACTS_DIR" in os.environ
+    else PROJECT_ROOT / "artifacts"
+)
 
 KAGGLE_DATASETS = {
-    "smd_onmiad": "mgusat/smd-onmiad",
+    "smd": "mgusat/smd-onmiad",
     "nasa_smap_msl": "patrickfleith/nasa-anomaly-detection-dataset-smap-msl",
     "nab": "boltzmannbrain/nab",
 }
@@ -129,6 +135,57 @@ LSTM_EPOCHS = _env_int("LSTM_EPOCHS", 20)
 LSTM_BATCH_SIZE = _env_int("LSTM_BATCH_SIZE", 64)
 LSTM_LR = _env_float("LSTM_LR", 1e-3)
 LSTM_ERROR_QUANTILE = _env_float("LSTM_ERROR_QUANTILE", 0.997)
+
+# ---------------------------------------------------------------------------
+# VAR (multivariate)
+# ---------------------------------------------------------------------------
+
+VAR_MAXLAGS = _env_int("VAR_MAXLAGS", 5)
+VAR_IC = _env_str("VAR_IC", "aic")
+VAR_Z_THRESH = _env_float("VAR_Z_THRESH", 3.0)
+VAR_AGGREGATION = _env_str("VAR_AGGREGATION", "max")
+
+# ---------------------------------------------------------------------------
+# Multivariate Isolation Forest
+# ---------------------------------------------------------------------------
+
+MULTI_ISO_CONTAMINATION = _env_float("MULTI_ISO_CONTAMINATION", 0.01)
+
+# ---------------------------------------------------------------------------
+# LSTM Autoencoder (multivariate)
+# ---------------------------------------------------------------------------
+
+LSTM_AE_LOOKBACK = _env_int("LSTM_AE_LOOKBACK", 10)
+LSTM_AE_HIDDEN_SIZE = _env_int("LSTM_AE_HIDDEN_SIZE", 64)
+LSTM_AE_LATENT_DIM = _env_int("LSTM_AE_LATENT_DIM", 32)
+LSTM_AE_NUM_LAYERS = _env_int("LSTM_AE_NUM_LAYERS", 1)
+LSTM_AE_DROPOUT = _env_float("LSTM_AE_DROPOUT", 0.0)
+LSTM_AE_EPOCHS = _env_int("LSTM_AE_EPOCHS", 30)
+LSTM_AE_BATCH_SIZE = _env_int("LSTM_AE_BATCH_SIZE", 64)
+LSTM_AE_LR = _env_float("LSTM_AE_LR", 1e-3)
+LSTM_AE_ERROR_QUANTILE = _env_float("LSTM_AE_ERROR_QUANTILE", 0.99)
+LSTM_AE_SCORE_METRIC = _env_str("LSTM_AE_SCORE_METRIC", "mse")
+
+# ---------------------------------------------------------------------------
+# LSTM Forecaster (multivariate)
+# ---------------------------------------------------------------------------
+
+LSTM_FC_LOOKBACK = _env_int("LSTM_FC_LOOKBACK", 10)
+LSTM_FC_HIDDEN_SIZE = _env_int("LSTM_FC_HIDDEN_SIZE", 64)
+LSTM_FC_NUM_LAYERS = _env_int("LSTM_FC_NUM_LAYERS", 1)
+LSTM_FC_DROPOUT = _env_float("LSTM_FC_DROPOUT", 0.0)
+LSTM_FC_EPOCHS = _env_int("LSTM_FC_EPOCHS", 30)
+LSTM_FC_BATCH_SIZE = _env_int("LSTM_FC_BATCH_SIZE", 64)
+LSTM_FC_LR = _env_float("LSTM_FC_LR", 1e-3)
+LSTM_FC_ERROR_QUANTILE = _env_float("LSTM_FC_ERROR_QUANTILE", 0.97)
+LSTM_FC_SCORE_METRIC = _env_str("LSTM_FC_SCORE_METRIC", "mse")
+
+# ---------------------------------------------------------------------------
+# SMD dataset
+# ---------------------------------------------------------------------------
+
+SMD_RAW_DIR = RAW_DATA_DIR / "smd_onmiad" / "ServerMachineDataset"
+SMD_BASE_DIR = PROCESSED_DATA_DIR / "smd"
 
 # ---------------------------------------------------------------------------
 # MLflow

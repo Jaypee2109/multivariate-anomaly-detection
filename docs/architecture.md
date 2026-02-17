@@ -81,6 +81,7 @@ Pattern: each module exposes `register(subparsers)` + `run(args)`.
 |-------------|-----------------|------------------------------------------  |
 | `data`      | `cli/data`      | Download and preprocess Kaggle datasets    |
 | `train`     | `cli/train`     | Train baselines, optional MLflow + eval    |
+| `train-mv`  | `cli/train_multivariate` | Train multivariate models on SMD    |
 | `benchmark` | `cli/benchmark` | Evaluate models across multiple datasets   |
 | `serve`     | `cli/serve`     | Start FastAPI inference server             |
 | `dashboard` | `cli/dashboard` | Start Plotly Dash interactive dashboard    |
@@ -107,6 +108,19 @@ Convention: higher scores = more anomalous.
 | `ARIMAResidualAnomalyDetector` | ARIMA fit, residual z-score threshold          |
 | `IsolationForestAnomalyDetector` | Scikit-learn ensemble, contamination param  |
 | `LSTMForecastAnomalyDetector`  | PyTorch LSTM, forecast-error quantile          |
+
+### `models/multivariate/` — Multivariate Anomaly Detectors
+
+All follow the same `fit() / predict() / decision_function()` interface (via `BaseMultivariateAnomalyDetector` or `@dataclass`). Designed for the SMD dataset (38 features, pre-normalised to [0, 1]).
+
+| Model                                  | Approach                                       |
+|----------------------------------------|------------------------------------------------|
+| `VARResidualAnomalyDetector`           | VAR(p) forecast residual z-scores, max/mean aggregation |
+| `MultivariateIsolationForestDetector`  | Scikit-learn ensemble on raw multivariate features |
+| `LSTMAutoencoderAnomalyDetector`       | LSTM autoencoder reconstruction error, quantile threshold |
+| `LSTMForecasterMultivariateDetector`   | LSTM next-step forecast error, quantile threshold |
+
+LSTM models use MSE for both training loss and anomaly scoring. Thresholds are computed as quantiles of training-set scores (overlap-averaged for the autoencoder). See decisions D14–D17 for rationale.
 
 ### `evaluation.py` — Metrics
 
@@ -207,6 +221,25 @@ Kaggle ──download──> data/raw/
                        v             v
            artifacts/anomalies/   MLflow (metrics,
                 *.csv             params, tags)
+
+─── Multivariate (SMD) path ───
+
+  data/raw/smd_onmiad/ServerMachineDataset/
+                       │
+              load_smd_machine(normalize=False)
+                       │              ↑ SMD is pre-normalised to [0,1]
+                 ┌─────┴─────┐
+              X_train      X_test + y_true
+                 │            │
+            model.fit()  model.predict()
+                          model.decision_function()
+                              │
+                     compute_point_metrics()
+                              │
+                              v
+              artifacts/multivariate/{machine}_results.csv
+                              │
+                       Dashboard (Model Analysis page)
 
 ─── Benchmark path ───
 

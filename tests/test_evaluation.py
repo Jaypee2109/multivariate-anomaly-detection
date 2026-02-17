@@ -44,10 +44,12 @@ class TestLabelsToRanges:
         assert len(ranges) == 1
         assert ranges[0][1] == sample_timestamps[-1]
 
-    def test_requires_datetime_index(self):
-        labels = pd.Series([True, False, True], index=[0, 1, 2])
-        with pytest.raises(TypeError, match="DatetimeIndex"):
-            labels_to_ranges(labels)
+    def test_integer_index_supported(self):
+        labels = pd.Series([False, True, True, False, True], index=[0, 1, 2, 3, 4])
+        ranges = labels_to_ranges(labels)
+        assert len(ranges) == 2
+        assert ranges[0] == (1, 2)
+        assert ranges[1] == (4, 4)
 
 
 class TestComputePointMetrics:

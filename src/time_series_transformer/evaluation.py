@@ -30,19 +30,17 @@ def _align_series(
     return y_true_aligned, y_pred_aligned
 
 
-def labels_to_ranges(labels: pd.Series) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+def labels_to_ranges(labels: pd.Series) -> list[tuple]:
     """
-    Convert a boolean / {0,1} Series (indexed by timestamp) into
-    a list of contiguous anomaly ranges (start, end).
+    Convert a boolean / {0,1} Series into a list of contiguous anomaly ranges
+    ``(start, end)``.
 
+    Works with any ordered index (``DatetimeIndex``, ``RangeIndex``, integer, …).
     Contiguous = consecutive True values in the Series.
     """
-    if not isinstance(labels.index, pd.DatetimeIndex):
-        raise TypeError("labels must have a DatetimeIndex.")
-
     labels_bool = labels.astype(bool)
 
-    ranges: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+    ranges: list[tuple] = []
     in_range = False
     start: pd.Timestamp | None = None
     prev_t: pd.Timestamp | None = None
@@ -67,10 +65,7 @@ def labels_to_ranges(labels: pd.Series) -> list[tuple[pd.Timestamp, pd.Timestamp
     return ranges
 
 
-def _ranges_overlap(
-    r1: tuple[pd.Timestamp, pd.Timestamp],
-    r2: tuple[pd.Timestamp, pd.Timestamp],
-) -> bool:
+def _ranges_overlap(r1: tuple, r2: tuple) -> bool:
     s1, e1 = r1
     s2, e2 = r2
     return max(s1, s2) <= min(e1, e2)
@@ -264,7 +259,6 @@ def summarize_anomalies(
             print(f"  auc_pr:    {pm.auc_pr:.4f}")
 
         # Range-level F1
-        # Note: y_true_labels must have a DatetimeIndex for labels_to_ranges()
         rm = compute_range_f1_from_labels(
             y_true=y_true_labels,
             y_pred=anomalies,
