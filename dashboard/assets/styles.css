@@ -176,15 +176,18 @@ body {
 }
 
 /* --- Dropdowns (Dash 4.x dcc.Dropdown dark override) --- */
+/* Use `background` shorthand (not background-color) to match Dash's
+   embedded CSS which uses `background: var(--Dash-Fill-Inverse-Strong)`.
+   Shorthand resets longhand, so we must override with shorthand too. */
 .dash-dropdown {
-    background-color: #1a1a1a !important;
+    background: #1a1a1a !important;
     border: 1px solid #444444 !important;
     border-radius: 6px !important;
     color: #ffffff !important;
 }
 
 .dash-dropdown-trigger {
-    background-color: #1a1a1a !important;
+    background: #1a1a1a !important;
     color: #ffffff !important;
 }
 
@@ -198,7 +201,7 @@ body {
 }
 
 .dash-dropdown-search {
-    background-color: transparent !important;
+    background: transparent !important;
     color: #ffffff !important;
 }
 
@@ -206,28 +209,32 @@ body {
     color: #888888 !important;
 }
 
+.dash-dropdown-search-container {
+    background: #1a1a1a !important;
+}
+
 .dash-dropdown-content {
-    background-color: #1a1a1a !important;
+    background: #1a1a1a !important;
     border: 1px solid #444444 !important;
 }
 
 .dash-dropdown-options {
-    background-color: #1a1a1a !important;
+    background: #1a1a1a !important;
 }
 
 .dash-dropdown-option {
-    background-color: #1a1a1a !important;
+    background: #1a1a1a !important;
     color: #ffffff !important;
 }
 
 .dash-dropdown-option:hover,
 .dash-dropdown-option[data-highlighted] {
-    background-color: #333333 !important;
+    background: #333333 !important;
     color: #ffffff !important;
 }
 
 .dash-dropdown-option[data-selected] {
-    background-color: #424242 !important;
+    background: #424242 !important;
     color: #ffffff !important;
 }
 
@@ -241,7 +248,7 @@ body {
 }
 
 .dash-dropdown-wrapper {
-    background-color: #1a1a1a !important;
+    background: #1a1a1a !important;
 }
 
 /* --- Tooltips --- */
@@ -316,6 +323,16 @@ body {
     accent-color: #636efa;
     margin-right: 6px;
     flex-shrink: 0;
+}
+
+/* --- Prevent white flash on page load --- */
+.js-plotly-plot,
+.plot-container,
+.dash-graph,
+.dash-loading,
+.dash-spinner-container,
+._dash-loading {
+    background-color: #111111 !important;
 }
 
 /* --- Utility --- */

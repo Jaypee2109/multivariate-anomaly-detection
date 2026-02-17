@@ -23,8 +23,14 @@ from datasets import (
 )
 from plotly.subplots import make_subplots
 from sklearn.metrics import (
+    average_precision_score,
     precision_recall_fscore_support,
     roc_auc_score,
+)
+from time_series_transformer.evaluation import (
+    compute_best_f1,
+    compute_detection_latency,
+    compute_point_adjust_metrics,
 )
 
 dash.register_page(__name__, path="/models", name="Model Analysis", order=2)
@@ -47,6 +53,18 @@ def _empty_fig(msg: str = "No data") -> go.Figure:
     fig = go.Figure()
     fig.update_layout(**_DARK_LAYOUT, title=msg)
     return fig
+
+
+# Transparent placeholder — invisible until callback replaces it,
+# so only the dcc.Loading spinner is visible during initial load.
+_BLANK = go.Figure()
+_BLANK.update_layout(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    xaxis_visible=False,
+    yaxis_visible=False,
+    margin=dict(l=0, r=0, t=0, b=0),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +132,7 @@ def _metric_bars_section() -> dbc.Container:
                         dcc.Loading(
                             dcc.Graph(
                                 id=f"ma-bar-{i}",
+                                figure=_BLANK,
                                 config={"displayModeBar": "hover"},
                                 style={"height": "320px"},
                             ),
@@ -157,6 +176,7 @@ def _timeseries_section() -> dbc.Container:
             dcc.Loading(
                 dcc.Graph(
                     id="ma-timeseries",
+                    figure=_BLANK,
                     config={"displayModeBar": "hover", "scrollZoom": True},
                     style={"height": "600px"},
                 ),
@@ -176,6 +196,7 @@ def _distributions_section() -> dbc.Container:
             dcc.Loading(
                 dcc.Graph(
                     id="ma-distributions",
+                    figure=_BLANK,
                     config={"displayModeBar": "hover"},
                     style={"height": "350px"},
                 ),
@@ -316,20 +337,22 @@ def update_selectors(
     return model_options, models, None, feat_options, feat_default
 
 
+# Metrics displayed as bar charts (subset) vs all metrics computed internally
+_DISPLAY_METRICS = ["Precision", "Recall", "AUC-ROC", "PA-F1"]
+
+
 @callback(
-    Output("ma-bar-0", "figure"),
-    Output("ma-bar-1", "figure"),
-    Output("ma-bar-2", "figure"),
-    Output("ma-bar-3", "figure"),
+    *[Output(f"ma-bar-{i}", "figure") for i in range(4)],
     Input("ma-store", "data"),
     Input("ma-models", "value"),
 )
 def update_metric_bars(
     store: dict | None, selected: list[str]
-) -> tuple[go.Figure, go.Figure, go.Figure, go.Figure]:
-    """Compute and render metric bar charts from the artifact CSV."""
+) -> tuple:
+    """Compute all metrics from artifact CSV, display top 4 as bar charts."""
+    empty = tuple(_empty_fig("No results yet.") for _ in range(4))
     if not store or store.get("error") or "artifacts" not in store:
-        return tuple(_empty_fig("No results yet.") for _ in range(4))
+        return empty
 
     df = pd.read_json(io.StringIO(store["artifacts"]), orient="split")
     models = store.get("models", [])
@@ -339,10 +362,9 @@ def update_metric_bars(
     if "is_anomaly" not in df.columns:
         return tuple(_empty_fig("No ground truth") for _ in range(4))
 
-    y_true = df["is_anomaly"].astype(int).values
+    y_true_s = pd.Series(df["is_anomaly"].astype(int).values)
+    y_true_arr = y_true_s.values
 
-    # Compute metrics per selected model
-    metric_names = ["F1", "Precision", "Recall", "AUC-ROC"]
     rows: list[dict] = []
     for model in selected:
         score_col = f"{model}_score"
@@ -350,37 +372,58 @@ def update_metric_bars(
         if anom_col not in df.columns:
             continue
 
-        y_pred = df[anom_col].astype(int).values
+        y_pred_s = pd.Series(df[anom_col].astype(int).values)
+        y_pred_arr = y_pred_s.values
         prec, rec, f1, _ = precision_recall_fscore_support(
-            y_true, y_pred, average="binary", zero_division=0,
+            y_true_arr, y_pred_arr, average="binary", zero_division=0,
         )
 
-        auc = None
+        scores_s = None
+        auc_roc = 0.0
+        auc_pr = 0.0
+        best_f1 = 0.0
         if score_col in df.columns:
-            scores = pd.to_numeric(df[score_col], errors="coerce").fillna(0).values
-            if len(np.unique(y_true)) > 1:
+            scores_s = pd.Series(
+                pd.to_numeric(df[score_col], errors="coerce").fillna(0).values
+            )
+            if len(np.unique(y_true_arr)) > 1:
                 try:
-                    auc = roc_auc_score(y_true, scores)
+                    auc_roc = roc_auc_score(y_true_arr, scores_s.values)
                 except ValueError:
                     pass
+                try:
+                    auc_pr = average_precision_score(y_true_arr, scores_s.values)
+                except ValueError:
+                    pass
+                bf = compute_best_f1(y_true_s, scores_s, n_thresholds=50)
+                best_f1 = bf.f1
+
+        # Point-adjust F1
+        pa = compute_point_adjust_metrics(y_true_s, y_pred_s)
+
+        # Detection latency (computed but not displayed as bar chart)
+        dl = compute_detection_latency(y_true_s, y_pred_s)
 
         rows.append({
             "model": model,
             "F1": f1,
             "Precision": prec,
             "Recall": rec,
-            "AUC-ROC": auc if auc is not None else 0.0,
+            "AUC-ROC": auc_roc,
+            "PA-F1": pa.f1,
+            "Best-F1": best_f1,
+            "AUC-PR": auc_pr,
+            "Latency": dl.mean_latency,
         })
 
     if not rows:
         return tuple(_empty_fig("No model data") for _ in range(4))
 
     metrics_df = pd.DataFrame(rows)
-    # Consistent model order across all charts (sorted by F1 descending)
     model_order = metrics_df.sort_values("F1", ascending=False)["model"].tolist()
 
     figs = []
-    for metric in metric_names:
+    for metric in _DISPLAY_METRICS:
         fig = px.bar(
             metrics_df,
             x="model",

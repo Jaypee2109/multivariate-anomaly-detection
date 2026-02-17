@@ -42,7 +42,12 @@ from time_series_transformer.config import (
     VAR_Z_THRESH,
 )
 from time_series_transformer.data_pipeline.smd_loading import load_smd_machine
-from time_series_transformer.evaluation import compute_point_metrics
+from time_series_transformer.evaluation import (
+    compute_best_f1,
+    compute_detection_latency,
+    compute_point_adjust_metrics,
+    compute_point_metrics,
+)
 from time_series_transformer.models.multivariate.isolation_forest import (
     MultivariateIsolationForestDetector,
 )
@@ -179,14 +184,37 @@ def run_multivariate_pipeline(
             n_anom / len(X_test) * 100,
         )
 
+        # Point-level metrics
         pm = compute_point_metrics(y_true=y_true, y_pred=anomalies, scores=scores)
         logger.info(
-            "  metrics: precision=%.4f  recall=%.4f  F1=%.4f  AUC-ROC=%s  AUC-PR=%s",
+            "  point:    P=%.4f  R=%.4f  F1=%.4f  AUC-ROC=%s  AUC-PR=%s",
             pm.precision,
             pm.recall,
             pm.f1,
             f"{pm.auc_roc:.4f}" if pm.auc_roc is not None else "N/A",
             f"{pm.auc_pr:.4f}" if pm.auc_pr is not None else "N/A",
+        )
+
+        # Point-adjust metrics (TranAD / OmniAnomaly protocol)
+        pa = compute_point_adjust_metrics(y_true=y_true, y_pred=anomalies)
+        logger.info(
+            "  PA:       P=%.4f  R=%.4f  F1=%.4f",
+            pa.precision, pa.recall, pa.f1,
+        )
+
+        # Best-F1 threshold search
+        bf = compute_best_f1(y_true=y_true, scores=scores)
+        logger.info(
+            "  best-F1:  F1=%.4f (thr=%.4g)  PA-F1=%.4f",
+            bf.f1, bf.threshold, bf.pa_f1,
+        )
+
+        # Detection latency
+        dl = compute_detection_latency(y_true=y_true, y_pred=anomalies)
+        logger.info(
+            "  latency:  mean=%.1f  median=%.1f  detected=%d/%d  missed=%d",
+            dl.mean_latency, dl.median_latency,
+            dl.n_detected, dl.n_segments, dl.n_missed,
         )
 
         if save_checkpoints:

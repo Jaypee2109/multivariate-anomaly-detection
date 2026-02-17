@@ -42,6 +42,15 @@ def _empty_fig(msg: str = "No data") -> go.Figure:
     return fig
 
 
+_BLANK = go.Figure()
+_BLANK.update_layout(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    xaxis_visible=False,
+    yaxis_visible=False,
+    margin=dict(l=0, r=0, t=0, b=0),
+)
+
 # ---------------------------------------------------------------------------
 # Reusable layout components
 # ---------------------------------------------------------------------------
@@ -185,6 +194,7 @@ def _timeseries_section() -> dbc.Container:
             dcc.Loading(
                 dcc.Graph(
                     id="ts-graph",
+                    figure=_BLANK,
                     config={"displayModeBar": "hover", "scrollZoom": True},
                     style={"height": "420px"},
                 ),
@@ -207,6 +217,7 @@ def _distribution_section() -> dbc.Container:
                         dcc.Loading(
                             dcc.Graph(
                                 id="hist-graph",
+                                figure=_BLANK,
                                 config={"displayModeBar": "hover"},
                                 style={"height": "350px"},
                             ),
@@ -219,6 +230,7 @@ def _distribution_section() -> dbc.Container:
                         dcc.Loading(
                             dcc.Graph(
                                 id="box-graph",
+                                figure=_BLANK,
                                 config={"displayModeBar": "hover"},
                                 style={"height": "350px"},
                             ),
@@ -262,6 +274,7 @@ def _rolling_section() -> dbc.Container:
             dcc.Loading(
                 dcc.Graph(
                     id="rolling-graph",
+                    figure=_BLANK,
                     config={"displayModeBar": "hover", "scrollZoom": True},
                     style={"height": "380px"},
                 ),
@@ -284,6 +297,7 @@ def _acf_section() -> dbc.Container:
                         dcc.Loading(
                             dcc.Graph(
                                 id="acf-graph",
+                                figure=_BLANK,
                                 config={"displayModeBar": "hover"},
                                 style={"height": "320px"},
                             ),
@@ -296,6 +310,7 @@ def _acf_section() -> dbc.Container:
                         dcc.Loading(
                             dcc.Graph(
                                 id="pacf-graph",
+                                figure=_BLANK,
                                 config={"displayModeBar": "hover"},
                                 style={"height": "320px"},
                             ),

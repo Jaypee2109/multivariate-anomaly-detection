@@ -14,6 +14,10 @@ if str(_project_root / "src") not in sys.path:
 
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
+
+# Set global default so empty graphs (before callbacks fire) are dark
+pio.templates.default = "plotly_dark"
 
 from time_series_transformer.config import ARTIFACTS_DIR, SMD_BASE_DIR  # noqa: E402
 from time_series_transformer.data_pipeline.smd_loading import SMD_COLUMN_NAMES  # noqa: E402
