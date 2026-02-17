@@ -7,7 +7,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
 
-from transformer import TransformerTimeSeriesWithLearnableTime2Vec
+from transformer import TransformerTimeSeriesWithTime2Vec
 
 # -------------------------------------------------
 # Dataset loading
@@ -312,7 +312,7 @@ def forecast_autoregressive(
 
         tfx = np.stack([hours, minutes, wdays, doy], axis=-1)
         x = torch.tensor(vals[-lag:], device=device)[None, :, None]
-        tfx = torch.tensor(tfx, device=device)[None]
+        tfx = torch.tensor(tfx, device=device, dtype=torch.float32)[None]
 
         tfy = torch.tensor(
             [
@@ -325,6 +325,7 @@ def forecast_autoregressive(
                 ]
             ],
             device=device,
+            dtype=torch.float32,
         )
 
         with torch.no_grad():
@@ -528,16 +529,20 @@ def main():
     TFyDIM = 5
     AR_EVAL_EVERY = 2
 
-    model = TransformerTimeSeriesWithLearnableTime2Vec(
-        t2v_dim=16,
-        model_dim=MODEL_DIM,
-        num_heads=NUM_HEADS,
-        num_layers=NUM_LAYERS,
-        dropout=0.1,
-        dim_feedforward=DIM_FEEDFORWARD,
-        tfx_dim=TFx_DIM,
-        tfy_dim=TFyDIM,
-    ).to(device)
+    model = (
+        TransformerTimeSeriesWithTime2Vec(
+            t2v_dim=16,
+            model_dim=MODEL_DIM,
+            num_heads=NUM_HEADS,
+            num_layers=NUM_LAYERS,
+            dropout=0.1,
+            dim_feedforward=DIM_FEEDFORWARD,
+            tfx_dim=TFx_DIM,
+            tfy_dim=TFyDIM,
+        )
+        .to(device)
+        .float()
+    )
 
     # ---- Load data (every rank loads)
     lag = 96
@@ -588,7 +593,7 @@ def main():
 
     criterion = torch.nn.MSELoss()
 
-    SAVE_LOC = f"/home/sc.uni-leipzig.de/uj74reda/Transformer/models/electricity_model_learnable_t2v_{EPOCHS}_epochs_{NUM_HEADS}_heads_{NUM_LAYERS}_layers_{MODEL_DIM}_dim_{DIM_FEEDFORWARD}_dim_feedforward_{TFx_DIM}_tfx_dim_{TFyDIM}_tfy_dim_ddp_fixed"
+    SAVE_LOC = f"/home/sc.uni-leipzig.de/uj74reda/Transformer/models/electricity_model_learnable_base_t2v_{EPOCHS}_epochs_{NUM_HEADS}_heads_{NUM_LAYERS}_layers_{MODEL_DIM}_dim_{DIM_FEEDFORWARD}_dim_feedforward_{TFx_DIM}_tfx_dim_{TFyDIM}_tfy_dim_ddp_fixed"
 
     train_ddp(
         model,

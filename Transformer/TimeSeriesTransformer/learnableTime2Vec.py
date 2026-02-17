@@ -54,13 +54,14 @@ class LearnableTime2Vec(nn.Module):
 
     def __init__(self, in_dim=1, out_dim=16):
         super().__init__()
-        self.w0 = nn.Parameter(torch.randn(in_dim))
-        self.b0 = nn.Parameter(torch.randn(1))
+        self.w0 = nn.Parameter(torch.randn(in_dim, dtype=torch.float32))
+        self.b0 = nn.Parameter(torch.randn(1, dtype=torch.float32))
 
-        self.W = nn.Parameter(torch.randn(out_dim - 1, in_dim))
-        self.B = nn.Parameter(torch.randn(out_dim - 1))
+        self.W = nn.Parameter(torch.randn(out_dim - 1, in_dim, dtype=torch.float32))
+        self.B = nn.Parameter(torch.randn(out_dim - 1, dtype=torch.float32))
 
     def forward(self, t):
+        t = t.to(self.w0.dtype)
         v0 = torch.matmul(t, self.w0) + self.b0
         z = torch.einsum("...i,ki->...k", t, self.W) + self.B
         vp = torch.sin(z)
