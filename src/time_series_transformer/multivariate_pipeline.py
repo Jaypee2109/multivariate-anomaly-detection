@@ -12,6 +12,18 @@ import torch
 
 from time_series_transformer.config import (
     ARTIFACTS_DIR,
+    CUSTOM_TF_BATCH_SIZE,
+    CUSTOM_TF_DIM_FF,
+    CUSTOM_TF_DROPOUT,
+    CUSTOM_TF_EPOCHS,
+    CUSTOM_TF_ERROR_QUANTILE,
+    CUSTOM_TF_LOOKBACK,
+    CUSTOM_TF_LR,
+    CUSTOM_TF_MODEL_DIM,
+    CUSTOM_TF_NUM_HEADS,
+    CUSTOM_TF_NUM_LAYERS,
+    CUSTOM_TF_SCORE_METRIC,
+    CUSTOM_TF_T2V_DIM,
     LSTM_AE_BATCH_SIZE,
     LSTM_AE_DROPOUT,
     LSTM_AE_EPOCHS,
@@ -43,6 +55,9 @@ from time_series_transformer.evaluation import (
     compute_point_adjust_metrics,
     compute_point_metrics,
 )
+from time_series_transformer.models.multivariate.custom_transformer import (
+    CustomTransformerDetector,
+)
 from time_series_transformer.models.multivariate.isolation_forest import (
     MultivariateIsolationForestDetector,
 )
@@ -57,13 +72,14 @@ MULTIVARIATE_MODEL_REGISTRY: dict[str, str] = {
     "multi_isolation_forest": "Isolation Forest (MV)",
     "lstm_autoencoder": "LSTM Autoencoder",
     "tranad": "TranAD",
+    "custom_transformer": "Custom Transformer (T2V)",
     # optional (use --model var / --model lstm_forecaster)
     "var": "VAR Residual",
     "lstm_forecaster": "LSTM Forecaster (MV)",
 }
 
 # Models built by default (without --model filter)
-_DEFAULT_MODELS = {"multi_isolation_forest", "lstm_autoencoder", "tranad"}
+_DEFAULT_MODELS = {"multi_isolation_forest", "lstm_autoencoder", "tranad", "custom_transformer"}
 
 
 def _seed_everything(seed: int) -> None:
@@ -106,6 +122,22 @@ def _build_model(key: str):
             epochs=TRANAD_EPOCHS,
             error_quantile=TRANAD_ERROR_QUANTILE,
             score_metric=TRANAD_SCORE_METRIC,
+            device="auto",
+        )
+    if key == "custom_transformer":
+        return CustomTransformerDetector(
+            lookback=CUSTOM_TF_LOOKBACK,
+            t2v_dim=CUSTOM_TF_T2V_DIM,
+            model_dim=CUSTOM_TF_MODEL_DIM,
+            num_heads=CUSTOM_TF_NUM_HEADS,
+            num_layers=CUSTOM_TF_NUM_LAYERS,
+            dim_feedforward=CUSTOM_TF_DIM_FF,
+            dropout=CUSTOM_TF_DROPOUT,
+            batch_size=CUSTOM_TF_BATCH_SIZE,
+            lr=CUSTOM_TF_LR,
+            epochs=CUSTOM_TF_EPOCHS,
+            error_quantile=CUSTOM_TF_ERROR_QUANTILE,
+            score_metric=CUSTOM_TF_SCORE_METRIC,
             device="auto",
         )
     if key == "var":

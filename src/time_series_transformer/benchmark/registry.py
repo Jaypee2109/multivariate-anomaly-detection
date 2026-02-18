@@ -255,6 +255,44 @@ def _register_multivariate_defaults() -> None:
         multivariate=True,
     )
 
+    from time_series_transformer.config import (
+        CUSTOM_TF_BATCH_SIZE,
+        CUSTOM_TF_DIM_FF,
+        CUSTOM_TF_DROPOUT,
+        CUSTOM_TF_EPOCHS,
+        CUSTOM_TF_ERROR_QUANTILE,
+        CUSTOM_TF_LOOKBACK,
+        CUSTOM_TF_LR,
+        CUSTOM_TF_MODEL_DIM,
+        CUSTOM_TF_NUM_HEADS,
+        CUSTOM_TF_NUM_LAYERS,
+        CUSTOM_TF_SCORE_METRIC,
+        CUSTOM_TF_T2V_DIM,
+    )
+    from time_series_transformer.models.multivariate.custom_transformer import (
+        CustomTransformerDetector,
+    )
+
+    register_model(
+        "custom_transformer",
+        lambda: CustomTransformerDetector(
+            lookback=CUSTOM_TF_LOOKBACK,
+            t2v_dim=CUSTOM_TF_T2V_DIM,
+            model_dim=CUSTOM_TF_MODEL_DIM,
+            num_heads=CUSTOM_TF_NUM_HEADS,
+            num_layers=CUSTOM_TF_NUM_LAYERS,
+            dim_feedforward=CUSTOM_TF_DIM_FF,
+            dropout=CUSTOM_TF_DROPOUT,
+            batch_size=CUSTOM_TF_BATCH_SIZE,
+            lr=CUSTOM_TF_LR,
+            epochs=CUSTOM_TF_EPOCHS,
+            error_quantile=CUSTOM_TF_ERROR_QUANTILE,
+            score_metric=CUSTOM_TF_SCORE_METRIC,
+            device="auto",
+        ),
+        multivariate=True,
+    )
+
 
 _register_defaults()
 _register_multivariate_defaults()

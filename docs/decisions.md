@@ -486,3 +486,42 @@ Overlap-averaging smooths scores, producing values in a different range than the
 - `_DEFAULT_MODELS` set added to `multivariate_pipeline.py`
 - VAR and LSTM Forecaster imports moved to lazy (only loaded when requested)
 - Code, tests, config, and registry entries preserved — nothing deleted
+
+---
+
+## D20: Custom Transformer adapted from partner's Time2Vec architecture
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** The partner (Lars) built a Time2Vec + cross-attention transformer for univariate forecasting on NAB/ECL data (`Transformer/Transformer/TimeSeriesTransformer/`). The architecture uses learnable Time2Vec temporal encoding, a causal transformer encoder, and a cross-attention decoder where the query is the Time2Vec embedding of the target position. To enable a direct comparison with TranAD on SMD, we needed a multivariate adaptation of this architecture.
+
+**Decision:** Adapt the partner's `TransformerTimeSeriesWithLearnableTime2Vec` for multivariate SMD anomaly detection, with derived time features instead of raw timestamps.
+
+**Key changes from the partner's original:**
+
+- **Multivariate input/output** — `n_features=38` instead of univariate (1 value)
+- **Derived time features** — SMD has no timestamps, only 1-minute sampling intervals. Time2Vec receives `(minute_of_hour, hour_of_day)` derived from absolute position indices, enabling the model to learn hourly and daily periodicities
+- **Forecast-error anomaly scoring** — MSE between predicted and actual next step, with overlap-averaged per-timestep scores and quantile thresholding (same pattern as LSTM Autoencoder and TranAD)
+- **OneCycleLR scheduler** — cosine annealing with 10% warmup, gradient clipping at 1.0
+
+**Architecture:**
+
+```
+Features + Time2Vec(minute_of_hour, hour_of_day) → Linear → TransformerEncoder(causal mask)
+→ CrossAttention(query=Time2Vec(next_pos), key/value=encoder) → MLP → next-step prediction
+```
+
+**Files added/modified:**
+
+- `models/multivariate/custom_transformer.py` — `LearnableTime2Vec`, `CustomTransformerForecaster`, `CustomTransformerDetector`
+- `config.py` — 12 `CUSTOM_TF_*` config entries
+- `multivariate_pipeline.py` — added to registry and default models
+- `benchmark/registry.py` — registered as `custom_transformer`
+- `cli/train_multivariate.py` — added to `--model` choices
+
+**Consequences:**
+
+- Default pipeline now runs 4 models: Isolation Forest, LSTM Autoencoder, TranAD, Custom Transformer
+- Enables direct Transformer-vs-Transformer comparison (TranAD reconstruction vs Custom TF forecast)
+- The partner's core architecture (Time2Vec + cross-attention) is preserved and attributable

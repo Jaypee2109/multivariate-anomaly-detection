@@ -39,7 +39,7 @@ Transformer/
     │   ├── data_pipeline/         # Download, load, preprocess, save
     │   ├── models/
 │   │   ├── baseline/          # Univariate detectors
-│   │   └── multivariate/      # Multivariate detectors (IF, LSTM-AE, TranAD, VAR, LSTM-FC)
+│   │   └── multivariate/      # Multivariate detectors (IF, LSTM-AE, TranAD, Custom TF, VAR, LSTM-FC)
     │   ├── api/                   # FastAPI inference server
     │   ├── benchmark/             # Model registry + benchmark runner
     │   ├── analysis/              # EDA and visualization
@@ -57,7 +57,7 @@ Installable via `pip install -e .`. All imports use the `time_series_transformer
 
 ### `scratch_transformer` / `scratch_time_series_transformer` (experimental)
 
-Standalone transformer experiments. Contains an NLP word-level transformer and an early time-series transformer prototype. These are **not part of the main package** — the production transformer model is TranAD in `models/multivariate/tranad.py`.
+Standalone transformer experiments. Contains an NLP word-level transformer and an early time-series transformer prototype. These are **not part of the main package** — the production transformer models are TranAD (`models/multivariate/tranad.py`) and the Custom Transformer (`models/multivariate/custom_transformer.py`), which adapts the partner's Time2Vec + cross-attention architecture for SMD.
 
 ## Key Modules
 
@@ -123,6 +123,7 @@ Default models (built by `train-mv` without `--model` filter):
 | `MultivariateIsolationForestDetector`  | Scikit-learn ensemble on raw multivariate features |
 | `LSTMAutoencoderAnomalyDetector`       | LSTM autoencoder reconstruction error, quantile threshold |
 | `TranADAnomalyDetector`               | Transformer encoder + dual decoder with self-conditioning (VLDB 2022) |
+| `CustomTransformerDetector`            | Time2Vec(minute, hour) + cross-attention forecaster, MSE anomaly score |
 
 Optional models (available via `--model var` / `--model lstm_forecaster`):
 
@@ -131,7 +132,7 @@ Optional models (available via `--model var` / `--model lstm_forecaster`):
 | `VARResidualAnomalyDetector`           | VAR(p) forecast residual z-scores, max/mean aggregation |
 | `LSTMForecasterMultivariateDetector`   | LSTM next-step forecast error, quantile threshold |
 
-LSTM models use MSE for both training loss and anomaly scoring. Thresholds are computed as quantiles of training-set scores (overlap-averaged for the autoencoder). TranAD uses AdamW + StepLR with the original paper's loss weighting `(1/epoch)*MSE(x1) + (1-1/epoch)*MSE(x2)`. See decisions D14–D18 for rationale.
+LSTM models use MSE for both training loss and anomaly scoring. Thresholds are computed as quantiles of training-set scores (overlap-averaged for the autoencoder). TranAD uses AdamW + StepLR with the original paper's loss weighting `(1/epoch)*MSE(x1) + (1-1/epoch)*MSE(x2)`. The Custom Transformer derives `minute_of_hour` and `hour_of_day` from absolute position indices (1-min sampling), encodes them via learnable Time2Vec, and uses a cross-attention decoder (query = Time2Vec of next position, key/value = encoder output) for next-step forecasting. See decisions D14–D20 for rationale.
 
 ### `evaluation.py` — Metrics
 
@@ -184,7 +185,7 @@ The server loads trained model checkpoints on startup and exposes them for infer
 Systematic evaluation of models across multiple datasets.
 
 - `dataset_spec.py`: `DatasetSpec` dataclass (name, csv_path, optional labels)
-- `registry.py`: Model factory registry — `register_model(name, factory)`, `get_factory(name)`, `list_models()`. Auto-registers univariate (arima, isolation_forest, lstm, rolling_zscore) and multivariate models (var, multi_isolation_forest, lstm_autoencoder, lstm_forecaster, tranad)
+- `registry.py`: Model factory registry — `register_model(name, factory)`, `get_factory(name)`, `list_models()`. Auto-registers univariate (arima, isolation_forest, lstm, rolling_zscore) and multivariate models (var, multi_isolation_forest, lstm_autoencoder, lstm_forecaster, tranad, custom_transformer)
 - `runner.py`: `BenchmarkRunner` — iterates models x datasets, collects metrics with error-tolerant execution
 - `results.py`: `BenchmarkResult` dataclass + `ResultsCollector` (DataFrame export, CSV, console table)
 

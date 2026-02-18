@@ -1,6 +1,6 @@
 # Time Series Transformer
 
-Anomaly detection on time series data. The project provides statistical/ML baselines (ARIMA, Isolation Forest, LSTM) for univariate data and multivariate anomaly detectors (Isolation Forest, LSTM Autoencoder, TranAD) for the SMD dataset, plus an interactive dashboard and inference API.
+Anomaly detection on time series data. The project provides statistical/ML baselines (ARIMA, Isolation Forest, LSTM) for univariate data and multivariate anomaly detectors (Isolation Forest, LSTM Autoencoder, TranAD, Custom Transformer) for the SMD dataset, plus an interactive dashboard and inference API.
 
 ## Requirements
 
@@ -123,11 +123,12 @@ Multivariate models implement `BaseMultivariateAnomalyDetector` and target the S
 
 Default models (run with `train-mv`):
 
-| Model              | Approach                                                    |
-| ------------------ | ----------------------------------------------------------- |
-| Isolation Forest   | Scikit-learn ensemble on raw multivariate features          |
-| LSTM Autoencoder   | LSTM autoencoder reconstruction error, quantile threshold   |
-| TranAD             | Transformer encoder + dual decoder with self-conditioning (VLDB 2022) |
+| Model               | Approach                                                    |
+| -------------------- | ----------------------------------------------------------- |
+| Isolation Forest     | Scikit-learn ensemble on raw multivariate features          |
+| LSTM Autoencoder     | LSTM autoencoder reconstruction error, quantile threshold   |
+| TranAD               | Transformer encoder + dual decoder with self-conditioning (VLDB 2022) |
+| Custom Transformer   | Time2Vec + cross-attention forecaster, MSE anomaly score (adapted from partner's architecture) |
 
 Optional models (available via `--model var` / `--model lstm_forecaster`):
 
@@ -372,7 +373,7 @@ src/
 │   ├── data_pipeline/              # Download, load, preprocess, save
 │   ├── models/
 │   │   ├── baseline/               # Univariate detectors (ARIMA, IF, LSTM, Z-Score)
-│   │   └── multivariate/           # Multivariate detectors (IF, LSTM-AE, TranAD, VAR, LSTM-FC)
+│   │   └── multivariate/           # Multivariate detectors (IF, LSTM-AE, TranAD, Custom TF, VAR, LSTM-FC)
 │   ├── api/                        # FastAPI inference server
 │   ├── benchmark/                  # Model registry + benchmark runner
 │   ├── analysis/                   # EDA and visualization

@@ -194,6 +194,23 @@ TRANAD_ERROR_QUANTILE = _env_float("TRANAD_ERROR_QUANTILE", 0.99)
 TRANAD_SCORE_METRIC = _env_str("TRANAD_SCORE_METRIC", "mse")
 
 # ---------------------------------------------------------------------------
+# Custom Transformer (multivariate) — adapted from Lars's Time2Vec architecture
+# ---------------------------------------------------------------------------
+
+CUSTOM_TF_LOOKBACK = _env_int("CUSTOM_TF_LOOKBACK", 30)
+CUSTOM_TF_T2V_DIM = _env_int("CUSTOM_TF_T2V_DIM", 16)
+CUSTOM_TF_MODEL_DIM = _env_int("CUSTOM_TF_MODEL_DIM", 64)
+CUSTOM_TF_NUM_HEADS = _env_int("CUSTOM_TF_NUM_HEADS", 4)
+CUSTOM_TF_NUM_LAYERS = _env_int("CUSTOM_TF_NUM_LAYERS", 2)
+CUSTOM_TF_DIM_FF = _env_int("CUSTOM_TF_DIM_FF", 256)
+CUSTOM_TF_DROPOUT = _env_float("CUSTOM_TF_DROPOUT", 0.1)
+CUSTOM_TF_EPOCHS = _env_int("CUSTOM_TF_EPOCHS", 15)
+CUSTOM_TF_BATCH_SIZE = _env_int("CUSTOM_TF_BATCH_SIZE", 64)
+CUSTOM_TF_LR = _env_float("CUSTOM_TF_LR", 1e-3)
+CUSTOM_TF_ERROR_QUANTILE = _env_float("CUSTOM_TF_ERROR_QUANTILE", 0.99)
+CUSTOM_TF_SCORE_METRIC = _env_str("CUSTOM_TF_SCORE_METRIC", "mse")
+
+# ---------------------------------------------------------------------------
 # SMD dataset
 # ---------------------------------------------------------------------------
 
