@@ -43,8 +43,7 @@ Transformer/
     │   ├── api/                   # FastAPI inference server
     │   ├── benchmark/             # Model registry + benchmark runner
     │   ├── analysis/              # EDA and visualization
-    │   ├── utils/                 # I/O, startup checks, data validation
-    │   └── scripts/               # Legacy standalone entry points
+    │   └── utils/                 # I/O, startup checks, data validation
     ├── scratch_transformer/       # Partner WIP: NLP transformer experiments
     └── scratch_time_series_transformer/  # Partner WIP: time-series transformer prototype
 ```

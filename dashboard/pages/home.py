@@ -130,7 +130,7 @@ layout = html.Div(
                                                 "Detect anomalous intervals in multivariate "
                                                 "server metrics using "
                                                 "Isolation Forest, LSTM Autoencoder, "
-                                                "and TranAD.",
+                                                "TranAD, and Custom Transformer.",
                                                 className="text-muted-light small",
                                             ),
                                         ],
