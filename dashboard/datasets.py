@@ -12,9 +12,9 @@ _project_root = Path(__file__).resolve().parents[1]
 if str(_project_root / "src") not in sys.path:
     sys.path.insert(0, str(_project_root / "src"))
 
-import plotly.express as px
-import plotly.graph_objects as go
-import plotly.io as pio
+import plotly.express as px  # noqa: E402
+import plotly.graph_objects as go  # noqa: E402
+import plotly.io as pio  # noqa: E402
 
 # Set global default so empty graphs (before callbacks fire) are dark
 pio.templates.default = "plotly_dark"
@@ -77,11 +77,7 @@ def discover_smd_features(df: pd.DataFrame) -> list[str]:
     generic names (f0, f1, ...).
     """
     smd_set = set(SMD_COLUMN_NAMES)
-    features = [
-        c for c in df.columns
-        if c in smd_set
-        or (c.startswith("f") and c[1:].isdigit())
-    ]
+    features = [c for c in df.columns if c in smd_set or (c.startswith("f") and c[1:].isdigit())]
     return features
 
 
@@ -138,9 +134,7 @@ def is_feature_column(col: str) -> bool:
         return False
     if col in set(SMD_COLUMN_NAMES):
         return True
-    if col.startswith("f") and col[1:].isdigit():
-        return True
-    return False
+    return bool(col.startswith("f") and col[1:].isdigit())
 
 
 def build_color_map(models: list[str]) -> dict[str, str]:

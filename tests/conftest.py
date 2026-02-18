@@ -47,10 +47,7 @@ def sample_multivariate_df() -> pd.DataFrame:
     rng = np.random.default_rng(42)
     n, k = 100, 5
     data = np.column_stack(
-        [
-            np.sin(np.linspace(0, 4 * np.pi, n) + i) + rng.normal(0, 0.1, n)
-            for i in range(k)
-        ]
+        [np.sin(np.linspace(0, 4 * np.pi, n) + i) + rng.normal(0, 0.1, n) for i in range(k)]
     )
     return pd.DataFrame(data, columns=[f"f{i}" for i in range(k)])
 

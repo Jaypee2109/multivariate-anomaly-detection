@@ -7,6 +7,7 @@ import time
 from contextlib import nullcontext
 
 import numpy as np
+import pandas as pd
 import torch
 
 from time_series_transformer.config import RANDOM_STATE, TRAIN_RATIO
@@ -194,10 +195,13 @@ class BenchmarkRunner:
                 pm, rm = None, None
                 if y_true_labels is not None:
                     pm = compute_point_metrics(
-                        y_true=y_true_labels, y_pred=anomalies, scores=scores,
+                        y_true=y_true_labels,
+                        y_pred=anomalies,
+                        scores=scores,
                     )
                     rm = compute_range_f1_from_labels(
-                        y_true=y_true_labels, y_pred=anomalies,
+                        y_true=y_true_labels,
+                        y_pred=anomalies,
                     )
 
                 self._log_mlflow_metrics(fit_time, predict_time, n_test, n_anom, pm, rm)
@@ -237,17 +241,18 @@ class BenchmarkRunner:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _load_labels(self, ds: DatasetSpec, y: "pd.Series") -> "pd.Series | None":
+    def _load_labels(self, ds: DatasetSpec, y: pd.Series) -> pd.Series | None:
         if not ds.has_labels():
             return None
-        import pandas as pd
 
         df = load_csv_to_df(ds.csv_path, parse_dates=["timestamp"])
         df = df.set_index("timestamp").sort_index()
 
         label_times = load_label_times(ds.labels_path, ds.labels_key)
         y_true_all = make_point_labels_from_times(
-            df.reset_index(), label_times, timestamp_col="timestamp",
+            df.reset_index(),
+            label_times,
+            timestamp_col="timestamp",
         )
         y_true_all.index = df.index
 
@@ -259,17 +264,21 @@ class BenchmarkRunner:
             return
         self._mlflow_fns["env"]()
         self._mlflow_fns["hash"](ds.csv_path)
-        self._mlflow.log_params({
-            "dataset": ds.name,
-            "train_ratio": self.train_ratio,
-            "random_state": self.random_state,
-            "train_size": len(y_train),
-            "test_size": len(y_test),
-        })
+        self._mlflow.log_params(
+            {
+                "dataset": ds.name,
+                "train_ratio": self.train_ratio,
+                "random_state": self.random_state,
+                "train_size": len(y_train),
+                "test_size": len(y_test),
+            }
+        )
         self._mlflow_fns["params"](model_name, model)
 
     def _run_single_multivariate(
-        self, ds: MultivariateDatasetSpec, model_name: str,
+        self,
+        ds: MultivariateDatasetSpec,
+        model_name: str,
     ) -> BenchmarkResult:
         try:
             from time_series_transformer.data_pipeline.smd_loading import (
@@ -277,7 +286,9 @@ class BenchmarkRunner:
             )
 
             machine_data = load_smd_machine(
-                ds.machine_id, base_dir=ds.base_dir, normalize=ds.normalize,
+                ds.machine_id,
+                base_dir=ds.base_dir,
+                normalize=ds.normalize,
             )
             X_train = machine_data.train_df
             X_test = machine_data.test_df
@@ -306,14 +317,22 @@ class BenchmarkRunner:
                 anom_rate = n_anom / n_test if n_test > 0 else 0.0
 
                 pm = compute_point_metrics(
-                    y_true=y_true, y_pred=anomalies, scores=scores,
+                    y_true=y_true,
+                    y_pred=anomalies,
+                    scores=scores,
                 )
                 rm = compute_range_f1_from_labels(
-                    y_true=y_true, y_pred=anomalies,
+                    y_true=y_true,
+                    y_pred=anomalies,
                 )
 
                 self._log_mlflow_metrics(
-                    fit_time, predict_time, n_test, n_anom, pm, rm,
+                    fit_time,
+                    predict_time,
+                    n_test,
+                    n_anom,
+                    pm,
+                    rm,
                 )
 
                 return BenchmarkResult(
@@ -340,7 +359,11 @@ class BenchmarkRunner:
 
         except Exception as e:
             logger.error(
-                "FAILED %s on %s: %s", model_name, ds.name, e, exc_info=True,
+                "FAILED %s on %s: %s",
+                model_name,
+                ds.name,
+                e,
+                exc_info=True,
             )
             return BenchmarkResult(
                 dataset_name=ds.name,

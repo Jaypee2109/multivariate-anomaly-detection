@@ -1,14 +1,16 @@
-from datetime import datetime
 import math
 import os
 import time
 from collections import Counter
-from dotenv import load_dotenv
+from datetime import datetime
+
 import torch
-from torchtext.data.utils import get_tokenizer
 from datasets import load_dataset
+from dotenv import load_dotenv
 from huggingface_hub import login
+from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
+
 from scratch_transformer.transformer import TransformerModel
 
 load_dotenv()
@@ -43,9 +45,7 @@ vocab.set_default_index(vocab["<unk>"])
 
 
 def data_process(raw_texts):
-    data = [
-        torch.tensor(vocab(tokenizer(item)), dtype=torch.long) for item in raw_texts
-    ]
+    data = [torch.tensor(vocab(tokenizer(item)), dtype=torch.long) for item in raw_texts]
     return torch.cat(tuple(filter(lambda t: t.numel() > 0, data)))
 
 
@@ -97,8 +97,6 @@ lr = 5.0  # learning rate
 optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 
-import time
-
 
 def train():
     model.train()  # Turn on the train mode
@@ -122,17 +120,9 @@ def train():
             cur_loss = total_loss / log_interval
             elapsed = time.time() - start_time
             print(
-                "| epoch {:3d} | {:5d}/{:5d} batches | "
-                "lr {:02.2f} | ms/batch {:5.2f} | "
-                "loss {:5.2f} | ppl {:8.2f}".format(
-                    epoch,
-                    batch,
-                    len(train_data) // bptt,
-                    scheduler.get_last_lr()[0],
-                    elapsed * 1000 / log_interval,
-                    cur_loss,
-                    math.exp(cur_loss),
-                )
+                f"| epoch {epoch:3d} | {batch:5d}/{len(train_data) // bptt:5d} batches | "
+                f"lr {scheduler.get_last_lr()[0]:02.2f} | ms/batch {elapsed * 1000 / log_interval:5.2f} | "
+                f"loss {cur_loss:5.2f} | ppl {math.exp(cur_loss):8.2f}"
             )
             total_loss = 0
             start_time = time.time()
@@ -146,9 +136,7 @@ def evaluate(eval_model, data_source):
         for i in range(0, data_source.size(0) - 1, bptt):
             data, targets = get_batch(data_source, i)
             if data.size(0) != bptt:
-                src_mask = model.generate_square_subsequent_mask(data.size(0)).to(
-                    device
-                )
+                src_mask = model.generate_square_subsequent_mask(data.size(0)).to(device)
             output = eval_model(data, src_mask)
             output_flat = output.view(-1, ntokens)
             total_loss += len(data) * criterion(output_flat, targets).item()
@@ -165,10 +153,7 @@ for epoch in range(1, epochs + 1):
     val_loss = evaluate(model, val_data)
     print("-" * 89)
     print(
-        "| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | "
-        "valid ppl {:8.2f}".format(
-            epoch, (time.time() - epoch_start_time), val_loss, math.exp(val_loss)
-        )
+        f"| end of epoch {epoch:3d} | time: {time.time() - epoch_start_time:5.2f}s | valid loss {val_loss:5.2f} | valid ppl {math.exp(val_loss):8.2f}"
     )
     print("-" * 89)
 

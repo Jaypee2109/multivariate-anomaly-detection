@@ -112,9 +112,7 @@ def run(args: argparse.Namespace) -> None:
             datasets.append(DatasetSpec(name=p.stem, csv_path=p))
 
     if not datasets:
-        logger.error(
-            "No datasets specified. Use --config <yaml> or --csv <path>."
-        )
+        logger.error("No datasets specified. Use --config <yaml> or --csv <path>.")
         sys.exit(1)
 
     logger.info("Benchmarking on %d dataset(s)", len(datasets))
@@ -148,7 +146,7 @@ def _load_config(config_path: Path) -> list:
     * ``nab`` (default) — univariate CSVs with optional NAB labels.
     * ``smd`` — multivariate SMD machine datasets (pre-split train/test).
     """
-    from time_series_transformer.benchmark import DatasetSpec, MultivariateDatasetSpec
+    from time_series_transformer.benchmark import DatasetSpec
 
     try:
         import yaml

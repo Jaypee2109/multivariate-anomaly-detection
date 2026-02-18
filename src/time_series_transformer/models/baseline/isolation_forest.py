@@ -1,4 +1,5 @@
-import numpy as np
+from __future__ import annotations
+
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 
@@ -17,7 +18,7 @@ class IsolationForestAnomalyDetector(BaseAnomalyDetector):
         self.random_state = random_state
         self.model_: IsolationForest | None = None
 
-    def fit(self, y: pd.Series) -> "IsolationForestAnomalyDetector":
+    def fit(self, y: pd.Series) -> IsolationForestAnomalyDetector:
         self.model_ = IsolationForest(
             contamination=self.contamination,
             random_state=self.random_state,

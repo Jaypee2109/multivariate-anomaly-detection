@@ -50,9 +50,7 @@ class PositionalEncoding(nn.Module):
 
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, d_model).float() * (-math.log(10000.0) / d_model)
-        )
+        div_term = torch.exp(torch.arange(0, d_model).float() * (-math.log(10000.0) / d_model))
         pe += torch.sin(position * div_term)
         pe += torch.cos(position * div_term)
         pe = pe.unsqueeze(0).transpose(0, 1)  # (max_len, 1, d_model)
@@ -78,7 +76,11 @@ class _TranADEncoderLayer(nn.Module):
     """
 
     def __init__(
-        self, d_model: int, nhead: int, dim_feedforward: int = 16, dropout: float = 0.0,
+        self,
+        d_model: int,
+        nhead: int,
+        dim_feedforward: int = 16,
+        dropout: float = 0.0,
     ):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
@@ -112,7 +114,11 @@ class _TranADDecoderLayer(nn.Module):
     """
 
     def __init__(
-        self, d_model: int, nhead: int, dim_feedforward: int = 16, dropout: float = 0.0,
+        self,
+        d_model: int,
+        nhead: int,
+        dim_feedforward: int = 16,
+        dropout: float = 0.0,
     ):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
@@ -203,7 +209,10 @@ class TranADModel(nn.Module):
         self.fcn = nn.Sequential(nn.Linear(2 * n_features, n_features), nn.Sigmoid())
 
     def encode(
-        self, src: torch.Tensor, c: torch.Tensor, tgt: torch.Tensor,
+        self,
+        src: torch.Tensor,
+        c: torch.Tensor,
+        tgt: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode *src* concatenated with conditioning signal *c*."""
         src = torch.cat((src, c), dim=2)  # (seq, batch, 2F)
@@ -214,7 +223,9 @@ class TranADModel(nn.Module):
         return tgt, memory
 
     def forward(
-        self, src: torch.Tensor, tgt: torch.Tensor,
+        self,
+        src: torch.Tensor,
+        tgt: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass with two-phase self-conditioning.
 
@@ -284,9 +295,7 @@ class TranADAnomalyDetector:
         """arr: (n_timesteps, n_features) -> (n_windows, lookback, n_features)"""
         T = self.lookback
         if len(arr) <= T:
-            raise DataValidationError(
-                f"Series length {len(arr)} too short for lookback={T}."
-            )
+            raise DataValidationError(f"Series length {len(arr)} too short for lookback={T}.")
         windows = np.lib.stride_tricks.sliding_window_view(arr, (T, arr.shape[1]))
         return windows.squeeze(axis=1).astype(np.float32)
 
@@ -337,7 +346,10 @@ class TranADAnomalyDetector:
 
         dataset = TensorDataset(torch.from_numpy(windows))
         loader = DataLoader(
-            dataset, batch_size=self.batch_size, shuffle=True, drop_last=False,
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            drop_last=False,
         )
 
         # AdamW with weight decay — matches the original TranAD repo
@@ -413,9 +425,7 @@ class TranADAnomalyDetector:
     def predict(self, X: pd.DataFrame) -> pd.Series:
         scores = self.decision_function(X)
         threshold = (
-            self.threshold_
-            if self.threshold_ is not None
-            else scores.quantile(self.error_quantile)
+            self.threshold_ if self.threshold_ is not None else scores.quantile(self.error_quantile)
         )
         return (scores >= threshold).rename("is_anomaly")
 

@@ -1,6 +1,7 @@
 # model.py
 import torch
 import torch.nn as nn
+
 from scratch_time_series_transformer.positional_encoding import PositionalEncoding
 
 
@@ -21,7 +22,7 @@ class TransformerTimeSeries(nn.Module):
         output_dim=1,
         forecast_horizon=3,
     ):
-        super(TransformerTimeSeries, self).__init__()
+        super().__init__()
 
         self.input_proj = nn.Linear(input_dim, model_dim)
         self.pos_encoder = PositionalEncoding(model_dim)
@@ -40,9 +41,7 @@ class TransformerTimeSeries(nn.Module):
             batch_first=True,
         )
 
-        self.transformer_encoder = nn.TransformerEncoder(
-            encoder_layer, num_layers=num_layers
-        )
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.decoder = nn.Linear(model_dim, output_dim)
 
     def forward(self, src):

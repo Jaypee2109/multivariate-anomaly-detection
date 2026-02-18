@@ -349,7 +349,11 @@ def compute_best_f1(
     for thr in thresholds:
         preds = (scores_arr >= thr).astype(int)
         _, _, f1, _ = precision_recall_fscore_support(
-            y_true_arr, preds, average="binary", pos_label=1, zero_division=0,
+            y_true_arr,
+            preds,
+            average="binary",
+            pos_label=1,
+            zero_division=0,
         )
         if f1 > best_f1:
             best_f1 = f1
@@ -358,13 +362,21 @@ def compute_best_f1(
     # Recompute full metrics at best threshold
     best_preds = (scores_arr >= best_thr).astype(int)
     best_prec, best_rec, best_f1, _ = precision_recall_fscore_support(
-        y_true_arr, best_preds, average="binary", pos_label=1, zero_division=0,
+        y_true_arr,
+        best_preds,
+        average="binary",
+        pos_label=1,
+        zero_division=0,
     )
 
     # PA-F1 at same threshold
     adjusted = point_adjust(y_true_arr, best_preds.astype(bool))
     pa_prec, pa_rec, pa_f1, _ = precision_recall_fscore_support(
-        y_true_arr, adjusted.astype(int), average="binary", pos_label=1, zero_division=0,
+        y_true_arr,
+        adjusted.astype(int),
+        average="binary",
+        pos_label=1,
+        zero_division=0,
     )
 
     return BestF1Result(
@@ -423,8 +435,11 @@ def compute_detection_latency(
 
     if not segments:
         return LatencyResult(
-            mean_latency=0.0, median_latency=0.0,
-            n_segments=0, n_detected=0, n_missed=0,
+            mean_latency=0.0,
+            median_latency=0.0,
+            n_segments=0,
+            n_detected=0,
+            n_missed=0,
         )
 
     latencies: list[int] = []

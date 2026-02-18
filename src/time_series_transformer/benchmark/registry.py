@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,10 @@ _MULTIVARIATE: set[str] = set()
 
 
 def register_model(
-    name: str, factory: Callable, *, multivariate: bool = False,
+    name: str,
+    factory: Callable,
+    *,
+    multivariate: bool = False,
 ) -> None:
     """Register a model factory under *name*."""
     _REGISTRY[name] = factory
@@ -24,9 +27,7 @@ def register_model(
 def get_factory(name: str) -> Callable:
     """Return the factory for *name*, or raise ``ValueError``."""
     if name not in _REGISTRY:
-        raise ValueError(
-            f"Model {name!r} not registered. Available: {list(_REGISTRY)}"
-        )
+        raise ValueError(f"Model {name!r} not registered. Available: {list(_REGISTRY)}")
     return _REGISTRY[name]
 
 
@@ -53,6 +54,7 @@ def list_univariate_models() -> list[str]:
 # ------------------------------------------------------------------
 # Built-in univariate models
 # ------------------------------------------------------------------
+
 
 def _register_defaults() -> None:
     from time_series_transformer.config import (
@@ -87,13 +89,15 @@ def _register_defaults() -> None:
     register_model(
         "arima",
         lambda: ARIMAResidualAnomalyDetector(
-            order=ARIMA_ORDER, z_thresh=ARIMA_Z_THRESH,
+            order=ARIMA_ORDER,
+            z_thresh=ARIMA_Z_THRESH,
         ),
     )
     register_model(
         "isolation_forest",
         lambda: IsolationForestAnomalyDetector(
-            contamination=ISO_CONTAMINATION, random_state=RANDOM_STATE,
+            contamination=ISO_CONTAMINATION,
+            random_state=RANDOM_STATE,
         ),
     )
     register_model(
@@ -113,7 +117,8 @@ def _register_defaults() -> None:
     register_model(
         "rolling_zscore",
         lambda: RollingZScoreAnomalyDetector(
-            window=ROLLING_WINDOW, z_thresh=ROLLING_Z_THRESH,
+            window=ROLLING_WINDOW,
+            z_thresh=ROLLING_Z_THRESH,
         ),
     )
 
@@ -121,6 +126,7 @@ def _register_defaults() -> None:
 # ------------------------------------------------------------------
 # Built-in multivariate models
 # ------------------------------------------------------------------
+
 
 def _register_multivariate_defaults() -> None:
     from time_series_transformer.config import (

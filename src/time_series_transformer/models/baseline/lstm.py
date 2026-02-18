@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -79,9 +78,9 @@ class LSTMForecastAnomalyDetector:
             else:
                 self._device = self.device
 
-        self.model: Optional[LSTMForecaster] = None
-        self.mean_: Optional[float] = None
-        self.std_: Optional[float] = None
+        self.model: LSTMForecaster | None = None
+        self.mean_: float | None = None
+        self.std_: float | None = None
         self._trained: bool = False
 
     # ------- helpers -------

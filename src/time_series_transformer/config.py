@@ -68,9 +68,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parent  # .../time_series_transformer
 SRC_ROOT = PACKAGE_ROOT.parent  # .../src
 PROJECT_ROOT = SRC_ROOT.parent  # .../Transformer
 
-DATA_DIR = (
-    Path(os.environ["DATA_DIR"]) if "DATA_DIR" in os.environ else PROJECT_ROOT / "data"
-)
+DATA_DIR = Path(os.environ["DATA_DIR"]) if "DATA_DIR" in os.environ else PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 ARTIFACTS_DIR = (

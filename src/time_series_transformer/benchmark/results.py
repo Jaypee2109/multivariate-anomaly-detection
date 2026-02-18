@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import pandas as pd
@@ -88,9 +88,7 @@ class ResultsCollector:
         # Format floats
         for col in display.columns:
             if display[col].dtype == float:
-                display[col] = display[col].map(
-                    lambda x: f"{x:.4f}" if pd.notna(x) else "-"
-                )
+                display[col] = display[col].map(lambda x: f"{x:.4f}" if pd.notna(x) else "-")
 
         sep = "=" * 88
         print(f"\n{sep}")

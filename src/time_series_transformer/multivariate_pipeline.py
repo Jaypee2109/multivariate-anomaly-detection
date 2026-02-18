@@ -10,8 +10,6 @@ from pathlib import Path
 import numpy as np
 import torch
 
-import pandas as pd
-
 from time_series_transformer.config import (
     ARTIFACTS_DIR,
     LSTM_AE_BATCH_SIZE,
@@ -112,30 +110,48 @@ def _build_model(key: str):
         )
     if key == "var":
         from time_series_transformer.config import (
-            VAR_AGGREGATION, VAR_IC, VAR_MAXLAGS, VAR_Z_THRESH,
+            VAR_AGGREGATION,
+            VAR_IC,
+            VAR_MAXLAGS,
+            VAR_Z_THRESH,
         )
         from time_series_transformer.models.multivariate.var import (
             VARResidualAnomalyDetector,
         )
+
         return VARResidualAnomalyDetector(
-            maxlags=VAR_MAXLAGS, ic=VAR_IC,
-            z_thresh=VAR_Z_THRESH, aggregation=VAR_AGGREGATION,
+            maxlags=VAR_MAXLAGS,
+            ic=VAR_IC,
+            z_thresh=VAR_Z_THRESH,
+            aggregation=VAR_AGGREGATION,
         )
     if key == "lstm_forecaster":
         from time_series_transformer.config import (
-            LSTM_FC_BATCH_SIZE, LSTM_FC_DROPOUT, LSTM_FC_EPOCHS,
-            LSTM_FC_ERROR_QUANTILE, LSTM_FC_HIDDEN_SIZE, LSTM_FC_LOOKBACK,
-            LSTM_FC_LR, LSTM_FC_NUM_LAYERS, LSTM_FC_SCORE_METRIC,
+            LSTM_FC_BATCH_SIZE,
+            LSTM_FC_DROPOUT,
+            LSTM_FC_EPOCHS,
+            LSTM_FC_ERROR_QUANTILE,
+            LSTM_FC_HIDDEN_SIZE,
+            LSTM_FC_LOOKBACK,
+            LSTM_FC_LR,
+            LSTM_FC_NUM_LAYERS,
+            LSTM_FC_SCORE_METRIC,
         )
         from time_series_transformer.models.multivariate.lstm_forecaster import (
             LSTMForecasterMultivariateDetector,
         )
+
         return LSTMForecasterMultivariateDetector(
-            lookback=LSTM_FC_LOOKBACK, hidden_size=LSTM_FC_HIDDEN_SIZE,
-            num_layers=LSTM_FC_NUM_LAYERS, dropout=LSTM_FC_DROPOUT,
-            batch_size=LSTM_FC_BATCH_SIZE, lr=LSTM_FC_LR,
-            epochs=LSTM_FC_EPOCHS, error_quantile=LSTM_FC_ERROR_QUANTILE,
-            score_metric=LSTM_FC_SCORE_METRIC, device="auto",
+            lookback=LSTM_FC_LOOKBACK,
+            hidden_size=LSTM_FC_HIDDEN_SIZE,
+            num_layers=LSTM_FC_NUM_LAYERS,
+            dropout=LSTM_FC_DROPOUT,
+            batch_size=LSTM_FC_BATCH_SIZE,
+            lr=LSTM_FC_LR,
+            epochs=LSTM_FC_EPOCHS,
+            error_quantile=LSTM_FC_ERROR_QUANTILE,
+            score_metric=LSTM_FC_SCORE_METRIC,
+            device="auto",
         )
     raise ValueError(f"Unknown model key: {key!r}")
 
@@ -229,22 +245,29 @@ def run_multivariate_pipeline(
         pa = compute_point_adjust_metrics(y_true=y_true, y_pred=anomalies)
         logger.info(
             "  PA:       P=%.4f  R=%.4f  F1=%.4f",
-            pa.precision, pa.recall, pa.f1,
+            pa.precision,
+            pa.recall,
+            pa.f1,
         )
 
         # Best-F1 threshold search
         bf = compute_best_f1(y_true=y_true, scores=scores)
         logger.info(
             "  best-F1:  F1=%.4f (thr=%.4g)  PA-F1=%.4f",
-            bf.f1, bf.threshold, bf.pa_f1,
+            bf.f1,
+            bf.threshold,
+            bf.pa_f1,
         )
 
         # Detection latency
         dl = compute_detection_latency(y_true=y_true, y_pred=anomalies)
         logger.info(
             "  latency:  mean=%.1f  median=%.1f  detected=%d/%d  missed=%d",
-            dl.mean_latency, dl.median_latency,
-            dl.n_detected, dl.n_segments, dl.n_missed,
+            dl.mean_latency,
+            dl.median_latency,
+            dl.n_detected,
+            dl.n_segments,
+            dl.n_missed,
         )
 
         if save_checkpoints:

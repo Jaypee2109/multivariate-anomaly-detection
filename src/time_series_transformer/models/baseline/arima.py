@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMA
 
@@ -17,7 +19,7 @@ class ARIMAResidualAnomalyDetector(BaseAnomalyDetector):
         self.model_fit_ = None
         self.resid_std_: float | None = None
 
-    def fit(self, y: pd.Series) -> "ARIMAResidualAnomalyDetector":
+    def fit(self, y: pd.Series) -> ARIMAResidualAnomalyDetector:
         model = ARIMA(y, order=self.order)
         self.model_fit_ = model.fit()
         residuals = self.model_fit_.resid

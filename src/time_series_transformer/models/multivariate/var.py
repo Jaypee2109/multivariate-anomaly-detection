@@ -69,10 +69,7 @@ class VARResidualAnomalyDetector(BaseMultivariateAnomalyDetector):
 
     def decision_function(self, X: pd.DataFrame) -> pd.Series:
         z_df = self._residual_zscores(X)
-        if self.aggregation == "max":
-            scores = z_df.max(axis=1)
-        else:
-            scores = z_df.mean(axis=1)
+        scores = z_df.max(axis=1) if self.aggregation == "max" else z_df.mean(axis=1)
         scores.name = "anomaly_score"
         return scores
 

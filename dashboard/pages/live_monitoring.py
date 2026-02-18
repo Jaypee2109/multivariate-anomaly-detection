@@ -8,7 +8,17 @@ import os
 import dash
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
-from dash import ClientsideFunction, Input, Output, State, callback, clientside_callback, ctx, dcc, html
+from dash import (
+    ClientsideFunction,
+    Input,
+    Output,
+    State,
+    callback,
+    clientside_callback,
+    ctx,
+    dcc,
+    html,
+)
 from datasets import (
     discover_smd_features,
     discover_smd_models,
@@ -227,8 +237,11 @@ layout = html.Div(
         dcc.Store(id="lm-state-store", storage_type="memory", data={"index": 0}),
         # WebSocket stores
         dcc.Store(id="ws-trigger", storage_type="memory"),
-        dcc.Store(id="ws-buffer", storage_type="memory",
-                  data={"chunks": [], "status": "disconnected", "init": None, "error": None}),
+        dcc.Store(
+            id="ws-buffer",
+            storage_type="memory",
+            data={"chunks": [], "status": "disconnected", "init": None, "error": None},
+        ),
         html.Div(id="ws-dummy", style={"display": "none"}),
         # Interval timer (disabled by default)
         dcc.Interval(id="lm-interval", interval=1000, disabled=True, n_intervals=0),
@@ -466,8 +479,13 @@ def toggle_playback(
             },
         }
         return (
-            False, {"index": 0, "consumed": 0}, None, ws_config,
-            _empty_fig("Connecting..."), [], "",
+            False,
+            {"index": 0, "consumed": 0},
+            None,
+            ws_config,
+            _empty_fig("Connecting..."),
+            [],
+            "",
             _CLEAN_BUFFER,
         )
 
@@ -476,8 +494,13 @@ def toggle_playback(
 
     if triggered == "lm-reset-btn":
         return (
-            True, {"index": 0, "consumed": 0}, None, {"action": "disconnect"},
-            _empty_fig("Select a dataset and press Play"), [], "",
+            True,
+            {"index": 0, "consumed": 0},
+            None,
+            {"action": "disconnect"},
+            _empty_fig("Select a dataset and press Play"),
+            [],
+            "",
             _CLEAN_BUFFER,
         )
 
@@ -531,9 +554,15 @@ def tick(
 
     def _err(msg: str, *, api: bool | None = None, pause: bool = True) -> tuple:
         return (
-            _empty_fig(msg), NO, state, NO,
+            _empty_fig(msg),
+            NO,
+            state,
+            NO,
             [html.Span(msg, className="text-muted-light")],
-            "", "", _api_badge(api), pause,
+            "",
+            "",
+            _api_badge(api),
+            pause,
         )
 
     # Handle error state
@@ -597,12 +626,19 @@ def tick(
         if not selected:
             fig = _build_chart_no_api(delta_ts, delta_vals)
             return (
-                fig, NO,
+                fig,
+                NO,
                 {"index": new_idx, "consumed": new_consumed},
                 acc_cache,
-                [html.Span("No models selected — showing raw data only.", className="text-muted-light")],
-                f"{new_idx:,} / {total:,}", _mode_badge(infer_mode, latency_ms),
-                _api_badge(True), finished,
+                [
+                    html.Span(
+                        "No models selected — showing raw data only.", className="text-muted-light"
+                    )
+                ],
+                f"{new_idx:,} / {total:,}",
+                _mode_badge(infer_mode, latency_ms),
+                _api_badge(True),
+                finished,
             )
 
         try:
@@ -613,12 +649,15 @@ def tick(
 
         summary = _build_progressive_summary(acc_cache, new_idx, color_map)
         return (
-            fig, NO,
+            fig,
+            NO,
             {"index": new_idx, "consumed": new_consumed},
-            acc_cache, summary,
+            acc_cache,
+            summary,
             f"{new_idx:,} / {total:,}",
             _mode_badge(infer_mode, latency_ms),
-            _api_badge(True), finished,
+            _api_badge(True),
+            finished,
         )
 
     # ------------------------------------------------------------------
@@ -626,7 +665,10 @@ def tick(
     # ------------------------------------------------------------------
     # Build extendData directly from delta arrays
     extend = _build_extend_from_delta(
-        delta_ts, delta_vals, delta_models, selected,
+        delta_ts,
+        delta_vals,
+        delta_models,
+        selected,
     )
 
     # Accumulate into cache for summary
@@ -652,12 +694,15 @@ def tick(
     summary = _build_progressive_summary(cache, new_idx, color_map)
 
     return (
-        NO, extend,
+        NO,
+        extend,
         {"index": new_idx, "consumed": new_consumed},
-        cache, summary,
+        cache,
+        summary,
         f"{new_idx:,} / {total:,}",
         _mode_badge(infer_mode, latency_ms),
-        _api_badge(True), finished,
+        _api_badge(True),
+        finished,
     )
 
 
@@ -725,17 +770,29 @@ def _build_init_figure(
             logger.warning("No data for model %s in API response", model_slug)
             # Add empty placeholder traces to keep trace indices consistent
             fig.add_trace(
-                go.Scatter(x=[], y=[], mode="markers", name=model_slug,
-                           marker={"color": color, "size": 6, "symbol": "x"},
-                           legendgroup=model_slug),
-                row=1, col=1,
+                go.Scatter(
+                    x=[],
+                    y=[],
+                    mode="markers",
+                    name=model_slug,
+                    marker={"color": color, "size": 6, "symbol": "x"},
+                    legendgroup=model_slug,
+                ),
+                row=1,
+                col=1,
             )
             fig.add_trace(
-                go.Scatter(x=[], y=[], mode="lines",
-                           name=f"{model_slug} (score)",
-                           line={"color": color, "width": 1.5},
-                           legendgroup=model_slug, showlegend=False),
-                row=2, col=1,
+                go.Scatter(
+                    x=[],
+                    y=[],
+                    mode="lines",
+                    name=f"{model_slug} (score)",
+                    line={"color": color, "width": 1.5},
+                    legendgroup=model_slug,
+                    showlegend=False,
+                ),
+                row=2,
+                col=1,
             )
             continue
 
@@ -903,9 +960,11 @@ def _build_progressive_summary(
             color = color_map.get(slug, "#636efa")
             cards.extend(_build_model_summary(slug, anomalies, scores, visible_to, color))
 
-        return [dbc.Row(cards, className="g-3")] if cards else [
-            html.Span("No detection results yet.", className="text-muted-light")
-        ]
+        return (
+            [dbc.Row(cards, className="g-3")]
+            if cards
+            else [html.Span("No detection results yet.", className="text-muted-light")]
+        )
     except Exception:
         logger.error("Failed to build summary", exc_info=True)
         return [html.Span("Error computing summary.", className="text-muted-light")]
@@ -948,24 +1007,34 @@ def _build_model_summary(
     # Card 1: Detection overview
     overview_card = dbc.Col(
         dbc.Card(
-            dbc.CardBody([
-                html.H6(
-                    [
-                        html.Span(style={
-                            "display": "inline-block", "width": "10px",
-                            "height": "10px", "borderRadius": "50%",
-                            "backgroundColor": color, "marginRight": "8px",
-                        }),
-                        slug,
-                    ],
-                    className="card-title mb-2",
-                ),
-                html.Div([
-                    _stat_row("Anomalies", f"{count:,}"),
-                    _stat_row("Rate", f"{ratio * 100:.2f}%"),
-                    _stat_row("Processed", f"{visible_to:,} pts"),
-                ], className="small"),
-            ]),
+            dbc.CardBody(
+                [
+                    html.H6(
+                        [
+                            html.Span(
+                                style={
+                                    "display": "inline-block",
+                                    "width": "10px",
+                                    "height": "10px",
+                                    "borderRadius": "50%",
+                                    "backgroundColor": color,
+                                    "marginRight": "8px",
+                                }
+                            ),
+                            slug,
+                        ],
+                        className="card-title mb-2",
+                    ),
+                    html.Div(
+                        [
+                            _stat_row("Anomalies", f"{count:,}"),
+                            _stat_row("Rate", f"{ratio * 100:.2f}%"),
+                            _stat_row("Processed", f"{visible_to:,} pts"),
+                        ],
+                        className="small",
+                    ),
+                ]
+            ),
             className="card-dark shadow rounded-3 h-100",
         ),
         md=3,
@@ -974,20 +1043,25 @@ def _build_model_summary(
     # Card 2: Anomaly segments
     segments_card = dbc.Col(
         dbc.Card(
-            dbc.CardBody([
-                html.H6(
-                    [html.I(className="bi bi-segmented-nav me-2"), "Segments"],
-                    className="card-title mb-2",
-                ),
-                html.Div([
-                    _stat_row("Regions", str(segments)),
-                    _stat_row("Longest streak", f"{longest} pts"),
-                    _stat_row(
-                        "Avg length",
-                        f"{count / segments:.1f} pts" if segments > 0 else "—",
+            dbc.CardBody(
+                [
+                    html.H6(
+                        [html.I(className="bi bi-segmented-nav me-2"), "Segments"],
+                        className="card-title mb-2",
                     ),
-                ], className="small"),
-            ]),
+                    html.Div(
+                        [
+                            _stat_row("Regions", str(segments)),
+                            _stat_row("Longest streak", f"{longest} pts"),
+                            _stat_row(
+                                "Avg length",
+                                f"{count / segments:.1f} pts" if segments > 0 else "—",
+                            ),
+                        ],
+                        className="small",
+                    ),
+                ]
+            ),
             className="card-dark shadow rounded-3 h-100",
         ),
         md=3,
@@ -996,17 +1070,22 @@ def _build_model_summary(
     # Card 3: Score statistics
     score_card = dbc.Col(
         dbc.Card(
-            dbc.CardBody([
-                html.H6(
-                    [html.I(className="bi bi-graph-up me-2"), "Score Stats"],
-                    className="card-title mb-2",
-                ),
-                html.Div([
-                    _stat_row("Current", f"{score_current:.4g}"),
-                    _stat_row("Mean", f"{score_mean:.4g}"),
-                    _stat_row("Peak", f"{score_max:.4g}"),
-                ], className="small"),
-            ]),
+            dbc.CardBody(
+                [
+                    html.H6(
+                        [html.I(className="bi bi-graph-up me-2"), "Score Stats"],
+                        className="card-title mb-2",
+                    ),
+                    html.Div(
+                        [
+                            _stat_row("Current", f"{score_current:.4g}"),
+                            _stat_row("Mean", f"{score_mean:.4g}"),
+                            _stat_row("Peak", f"{score_max:.4g}"),
+                        ],
+                        className="small",
+                    ),
+                ]
+            ),
             className="card-dark shadow rounded-3 h-100",
         ),
         md=3,
@@ -1028,22 +1107,27 @@ def _build_model_summary(
 
     status_card = dbc.Col(
         dbc.Card(
-            dbc.CardBody([
-                html.H6(
-                    [html.I(className="bi bi-activity me-2"), "Status"],
-                    className="card-title mb-2",
-                ),
-                html.Div([
+            dbc.CardBody(
+                [
+                    html.H6(
+                        [html.I(className="bi bi-activity me-2"), "Status"],
+                        className="card-title mb-2",
+                    ),
                     html.Div(
-                        [html.I(className=f"{status_icon} me-2"), status_text],
-                        className=f"mb-2 {status_cls}",
+                        [
+                            html.Div(
+                                [html.I(className=f"{status_icon} me-2"), status_text],
+                                className=f"mb-2 {status_cls}",
+                            ),
+                            _stat_row(
+                                "Latest",
+                                "Anomaly" if (anomalies and anomalies[-1]) else "Normal",
+                            ),
+                        ],
+                        className="small",
                     ),
-                    _stat_row(
-                        "Latest",
-                        "Anomaly" if (anomalies and anomalies[-1]) else "Normal",
-                    ),
-                ], className="small"),
-            ]),
+                ]
+            ),
             className="card-dark shadow rounded-3 h-100",
         ),
         md=3,

@@ -16,7 +16,7 @@ import logging
 import os
 import time
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -211,10 +211,7 @@ async def list_artifact_machines() -> dict[str, Any]:
     artifact_dir = ARTIFACTS_DIR / "multivariate"
     if not artifact_dir.exists():
         return {"machines": []}
-    machines = sorted(
-        p.stem.replace("_results", "")
-        for p in artifact_dir.glob("*_results.csv")
-    )
+    machines = sorted(p.stem.replace("_results", "") for p in artifact_dir.glob("*_results.csv"))
     return {"machines": machines}
 
 
@@ -496,10 +493,13 @@ async def websocket_stream(ws: WebSocket) -> None:
                 if active:
                     logger.info(
                         "Running live inference for %s (%d models)…",
-                        machine_id, len(active),
+                        machine_id,
+                        len(active),
                     )
                     full_models, latency_ms = await asyncio.to_thread(
-                        _run_live_inference, active, test_df,
+                        _run_live_inference,
+                        active,
+                        test_df,
                     )
                 if full_models:
                     values = test_df[feature].tolist()
@@ -508,27 +508,32 @@ async def websocket_stream(ws: WebSocket) -> None:
                     mode = "live"
                     logger.info(
                         "Live inference complete: %d models, %.0fms",
-                        len(slugs), latency_ms,
+                        len(slugs),
+                        latency_ms,
                     )
 
         # --- Fall back to artifact CSV --------------------------------------
         if mode == "artifact":
             df = _load_smd_artifact(machine_id)
             if df is None:
-                await ws.send_json({
-                    "type": "error",
-                    "detail": f"No data for machine '{machine_id}'. "
-                    "Run: python -m time_series_transformer train-mv "
-                    f"--machine {machine_id} --save-checkpoints",
-                })
+                await ws.send_json(
+                    {
+                        "type": "error",
+                        "detail": f"No data for machine '{machine_id}'. "
+                        "Run: python -m time_series_transformer train-mv "
+                        f"--machine {machine_id} --save-checkpoints",
+                    }
+                )
                 await ws.close()
                 return
 
             if feature not in df.columns:
-                await ws.send_json({
-                    "type": "error",
-                    "detail": f"Feature '{feature}' not found for {machine_id}",
-                })
+                await ws.send_json(
+                    {
+                        "type": "error",
+                        "detail": f"Feature '{feature}' not found for {machine_id}",
+                    }
+                )
                 await ws.close()
                 return
 
@@ -537,32 +542,32 @@ async def websocket_stream(ws: WebSocket) -> None:
 
             available_models = _discover_artifact_models(df)
             if not available_models:
-                await ws.send_json({
-                    "type": "error",
-                    "detail": "No model results in artifact",
-                })
+                await ws.send_json(
+                    {
+                        "type": "error",
+                        "detail": "No model results in artifact",
+                    }
+                )
                 await ws.close()
                 return
 
             slugs = model_slugs or available_models
             unknown = set(slugs) - set(available_models)
             if unknown:
-                await ws.send_json({
-                    "type": "error",
-                    "detail": f"Unknown models: {sorted(unknown)}. "
-                    f"Available: {available_models}",
-                })
+                await ws.send_json(
+                    {
+                        "type": "error",
+                        "detail": f"Unknown models: {sorted(unknown)}. "
+                        f"Available: {available_models}",
+                    }
+                )
                 await ws.close()
                 return
 
             for slug in slugs:
                 score_col = f"{slug}_score"
                 anom_col = f"{slug}_is_anomaly"
-                scores = (
-                    df[score_col].tolist()
-                    if score_col in df.columns
-                    else [0.0] * total
-                )
+                scores = df[score_col].tolist() if score_col in df.columns else [0.0] * total
                 anomalies = (
                     df[anom_col].astype(bool).tolist()
                     if anom_col in df.columns
@@ -577,10 +582,12 @@ async def websocket_stream(ws: WebSocket) -> None:
 
         # Step 3: Validate & generate timestamps
         if total < 10:
-            await ws.send_json({
-                "type": "error",
-                "detail": f"Dataset too small: {total} points",
-            })
+            await ws.send_json(
+                {
+                    "type": "error",
+                    "detail": f"Dataset too small: {total} points",
+                }
+            )
             await ws.close()
             return
 
@@ -588,14 +595,16 @@ async def websocket_stream(ws: WebSocket) -> None:
         timestamps = ts_index.strftime("%Y-%m-%dT%H:%M:%S").tolist()
 
         # Send init message
-        await ws.send_json({
-            "type": "init",
-            "total": total,
-            "dataset_name": f"{machine_id}/{feature}",
-            "models_used": list(slugs),
-            "latency_ms": round(latency_ms, 1),
-            "mode": mode,
-        })
+        await ws.send_json(
+            {
+                "type": "init",
+                "total": total,
+                "dataset_name": f"{machine_id}/{feature}",
+                "models_used": list(slugs),
+                "latency_ms": round(latency_ms, 1),
+                "mode": mode,
+            }
+        )
 
         # Step 4: Stream chunks
         index = 0
@@ -628,7 +637,7 @@ async def websocket_stream(ws: WebSocket) -> None:
                 elif action == "close":
                     await ws.close()
                     return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass  # No control message — continue streaming
 
             if paused:
@@ -644,15 +653,17 @@ async def websocket_stream(ws: WebSocket) -> None:
                     "anomalies": mdata["anomalies"][index:end],
                 }
 
-            await ws.send_json({
-                "type": "chunk",
-                "index": index,
-                "timestamps": timestamps[index:end],
-                "values": values[index:end],
-                "models": chunk_models,
-                "total": total,
-                "progress": round(end / total, 4),
-            })
+            await ws.send_json(
+                {
+                    "type": "chunk",
+                    "index": index,
+                    "timestamps": timestamps[index:end],
+                    "values": values[index:end],
+                    "models": chunk_models,
+                    "total": total,
+                    "progress": round(end / total, 4),
+                }
+            )
 
             index = end
             await asyncio.sleep(interval_ms / 1000.0)
@@ -662,12 +673,10 @@ async def websocket_stream(ws: WebSocket) -> None:
 
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected")
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("WebSocket client did not send config within timeout")
-        try:
+        with suppress(Exception):
             await ws.close(code=1008, reason="Config timeout")
-        except Exception:
-            pass
     except Exception:
         logger.exception("WebSocket error")
         try:

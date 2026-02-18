@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 
 class TestVARResidualDetector:
@@ -68,7 +67,11 @@ class TestLSTMAutoencoder:
         )
 
         det = LSTMAutoencoderAnomalyDetector(
-            lookback=10, hidden_size=16, latent_dim=8, epochs=2, batch_size=16,
+            lookback=10,
+            hidden_size=16,
+            latent_dim=8,
+            epochs=2,
+            batch_size=16,
         )
         train = sample_multivariate_df.iloc[:70]
         test = sample_multivariate_df.iloc[70:]
@@ -88,7 +91,11 @@ class TestLSTMAutoencoder:
         )
 
         det = LSTMAutoencoderAnomalyDetector(
-            lookback=10, hidden_size=16, latent_dim=8, epochs=2, batch_size=16,
+            lookback=10,
+            hidden_size=16,
+            latent_dim=8,
+            epochs=2,
+            batch_size=16,
         )
         det.fit(sample_multivariate_df.iloc[:70])
 

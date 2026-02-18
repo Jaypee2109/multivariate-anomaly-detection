@@ -1,7 +1,8 @@
 import math
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 from scratch_transformer.positional_encoding import (
     OldRotaryEncoderLayer,
     PositionalEncoding,
@@ -11,8 +12,8 @@ from scratch_transformer.rotary_encoding import RotaryEncoderLayer
 
 class TransformerModel(nn.Module):
     def __init__(self, ntoken, ninp, nhead, nhid, nlayers, dropout=0.5):
-        super(TransformerModel, self).__init__()
-        from torch.nn import TransformerEncoder, TransformerEncoderLayer
+        super().__init__()
+        from torch.nn import TransformerEncoder
 
         self.model_type = "Transformer"
         self.pos_encoder = PositionalEncoding(ninp, dropout)
@@ -25,11 +26,7 @@ class TransformerModel(nn.Module):
 
     def generate_square_subsequent_mask(self, sz):
         mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
-        mask = (
-            mask.float()
-            .masked_fill(mask == 0, float("-inf"))
-            .masked_fill(mask == 1, float(0.0))
-        )
+        mask = mask.float().masked_fill(mask == 0, float("-inf")).masked_fill(mask == 1, 0.0)
         return mask
 
     def init_weights(self):
@@ -61,11 +58,7 @@ class TransformerModelRotary(nn.Module):
 
     def generate_square_subsequent_mask(self, sz):
         mask = torch.triu(torch.ones(sz, sz)) == 1
-        mask = (
-            mask.float()
-            .masked_fill(mask == 0, float("-inf"))
-            .masked_fill(mask == 1, 0.0)
-        )
+        mask = mask.float().masked_fill(mask == 0, float("-inf")).masked_fill(mask == 1, 0.0)
         return mask
 
     def init_weights(self):

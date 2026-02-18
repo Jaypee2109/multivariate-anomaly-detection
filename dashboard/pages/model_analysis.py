@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
 
 import dash
@@ -27,6 +28,7 @@ from sklearn.metrics import (
     precision_recall_fscore_support,
     roc_auc_score,
 )
+
 from time_series_transformer.evaluation import (
     compute_best_f1,
     compute_detection_latency,
@@ -346,9 +348,7 @@ _DISPLAY_METRICS = ["Precision", "Recall", "AUC-ROC", "PA-F1"]
     Input("ma-store", "data"),
     Input("ma-models", "value"),
 )
-def update_metric_bars(
-    store: dict | None, selected: list[str]
-) -> tuple:
+def update_metric_bars(store: dict | None, selected: list[str]) -> tuple:
     """Compute all metrics from artifact CSV, display top 4 as bar charts."""
     empty = tuple(_empty_fig("No results yet.") for _ in range(4))
     if not store or store.get("error") or "artifacts" not in store:
@@ -375,7 +375,10 @@ def update_metric_bars(
         y_pred_s = pd.Series(df[anom_col].astype(int).values)
         y_pred_arr = y_pred_s.values
         prec, rec, f1, _ = precision_recall_fscore_support(
-            y_true_arr, y_pred_arr, average="binary", zero_division=0,
+            y_true_arr,
+            y_pred_arr,
+            average="binary",
+            zero_division=0,
         )
 
         scores_s = None
@@ -383,18 +386,12 @@ def update_metric_bars(
         auc_pr = 0.0
         best_f1 = 0.0
         if score_col in df.columns:
-            scores_s = pd.Series(
-                pd.to_numeric(df[score_col], errors="coerce").fillna(0).values
-            )
+            scores_s = pd.Series(pd.to_numeric(df[score_col], errors="coerce").fillna(0).values)
             if len(np.unique(y_true_arr)) > 1:
-                try:
+                with contextlib.suppress(ValueError):
                     auc_roc = roc_auc_score(y_true_arr, scores_s.values)
-                except ValueError:
-                    pass
-                try:
+                with contextlib.suppress(ValueError):
                     auc_pr = average_precision_score(y_true_arr, scores_s.values)
-                except ValueError:
-                    pass
                 bf = compute_best_f1(y_true_s, scores_s, n_thresholds=50)
                 best_f1 = bf.f1
 
@@ -404,17 +401,19 @@ def update_metric_bars(
         # Detection latency (computed but not displayed as bar chart)
         dl = compute_detection_latency(y_true_s, y_pred_s)
 
-        rows.append({
-            "model": model,
-            "F1": f1,
-            "Precision": prec,
-            "Recall": rec,
-            "AUC-ROC": auc_roc,
-            "PA-F1": pa.f1,
-            "Best-F1": best_f1,
-            "AUC-PR": auc_pr,
-            "Latency": dl.mean_latency,
-        })
+        rows.append(
+            {
+                "model": model,
+                "F1": f1,
+                "Precision": prec,
+                "Recall": rec,
+                "AUC-ROC": auc_roc,
+                "PA-F1": pa.f1,
+                "Best-F1": best_f1,
+                "AUC-PR": auc_pr,
+                "Latency": dl.mean_latency,
+            }
+        )
 
     if not rows:
         return tuple(_empty_fig("No model data") for _ in range(4))
@@ -447,7 +446,9 @@ def update_metric_bars(
     Input("ma-feature", "value"),
 )
 def update_timeseries(
-    store: dict | None, selected: list[str], feature: str | None,
+    store: dict | None,
+    selected: list[str],
+    feature: str | None,
 ) -> go.Figure:
     """Render detection results: feature + anomaly markers (top) and scores (bottom)."""
     if not store or store.get("error") or "artifacts" not in store:
@@ -491,8 +492,11 @@ def update_timeseries(
     # Ground truth anomaly zones
     if "is_anomaly" in df.columns:
         add_anomaly_zones(
-            fig, df["is_anomaly"].astype(bool),
-            label="Ground Truth", row=1, col=1,
+            fig,
+            df["is_anomaly"].astype(bool),
+            label="Ground Truth",
+            row=1,
+            col=1,
         )
 
     # Per-model anomaly markers

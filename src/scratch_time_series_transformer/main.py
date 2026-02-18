@@ -1,10 +1,12 @@
 import os
-from dotenv import load_dotenv
-from huggingface_hub import login
+
 import torch
-from datasets import load_dataset
 import torch.nn as nn
 import torch.optim as optim
+from datasets import load_dataset
+from dotenv import load_dotenv
+from huggingface_hub import login
+
 from time_series_transformer import TransformerTimeSeries
 
 # -------------------------------------------------
@@ -164,9 +166,7 @@ for epoch in range(epochs):
             val_loss += criterion(model(xb), yb).item() * len(xb)
     avg_val_loss = val_loss / len(X_val)
 
-    print(
-        f"Epoch {epoch+1} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}"
-    )
+    print(f"Epoch {epoch + 1} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
 
     # 🔹 Clear GPU memory between epochs
     if device.type == "mps":
@@ -286,9 +286,9 @@ print("----------------------------------")
 for i, pred in enumerate(pred_long):
     truth = true_future[i]
     if truth is None:
-        print(f"t+{i+1:<2}: {pred:.4f} |   (no data)")
+        print(f"t+{i + 1:<2}: {pred:.4f} |   (no data)")
     else:
-        print(f"t+{i+1:<2}: {pred:.4f} | {truth:.4f}")
+        print(f"t+{i + 1:<2}: {pred:.4f} | {truth:.4f}")
 
 print("\nPred list:", pred_long)
 print("True list:", true_future)

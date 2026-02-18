@@ -118,7 +118,8 @@ def preprocess_smd(
             if subdir == "test_label":
                 # Labels are a 1-D array (one column)
                 pd.DataFrame({"is_anomaly": arr.astype(int)}).to_csv(
-                    dst, index=False,
+                    dst,
+                    index=False,
                 )
             else:
                 n_feat = arr.shape[1] if arr.ndim == 2 else 1
@@ -138,7 +139,9 @@ def preprocess_smd(
 
     logger.info(
         "Preprocessed %d SMD machines: %s → %s",
-        len(machines), raw_dir, processed_dir,
+        len(machines),
+        raw_dir,
+        processed_dir,
     )
     return machines
 
@@ -225,7 +228,8 @@ def load_smd_machine(
 
 
 def _load_splits(
-    machine_id: str, base_dir: Path,
+    machine_id: str,
+    base_dir: Path,
 ) -> tuple[pd.DataFrame, pd.DataFrame, np.ndarray]:
     """Load train/test/labels, trying processed CSV then raw TXT."""
     # Try processed CSVs first

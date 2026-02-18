@@ -28,7 +28,10 @@ def mock_smd_dir(tmp_path):
     np.savetxt(base / "train" / f"{machine_id}.txt", train_data, delimiter=",")
     np.savetxt(base / "test" / f"{machine_id}.txt", test_data, delimiter=",")
     np.savetxt(
-        base / "test_label" / f"{machine_id}.txt", labels, delimiter=",", fmt="%d",
+        base / "test_label" / f"{machine_id}.txt",
+        labels,
+        delimiter=",",
+        fmt="%d",
     )
     with open(base / "interpretation_label" / f"{machine_id}.txt", "w") as f:
         f.write("10-14:0,1,2\n")
@@ -57,7 +60,10 @@ def mock_smd_dir_38(tmp_path):
     np.savetxt(base / "train" / f"{machine_id}.txt", train_data, delimiter=",")
     np.savetxt(base / "test" / f"{machine_id}.txt", test_data, delimiter=",")
     np.savetxt(
-        base / "test_label" / f"{machine_id}.txt", labels, delimiter=",", fmt="%d",
+        base / "test_label" / f"{machine_id}.txt",
+        labels,
+        delimiter=",",
+        fmt="%d",
     )
     with open(base / "interpretation_label" / f"{machine_id}.txt", "w") as f:
         f.write("10-14:0,1,2\n")

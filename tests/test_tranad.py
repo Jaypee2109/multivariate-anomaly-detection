@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 import torch
 
 
@@ -46,7 +45,11 @@ class TestTranADAnomalyDetector:
         )
 
         det = TranADAnomalyDetector(
-            lookback=5, n_heads=5, dim_feedforward=8, epochs=2, batch_size=16,
+            lookback=5,
+            n_heads=5,
+            dim_feedforward=8,
+            epochs=2,
+            batch_size=16,
         )
         train = sample_multivariate_df.iloc[:70]
         test = sample_multivariate_df.iloc[70:]
@@ -66,7 +69,11 @@ class TestTranADAnomalyDetector:
         )
 
         det = TranADAnomalyDetector(
-            lookback=5, n_heads=5, dim_feedforward=8, epochs=2, batch_size=16,
+            lookback=5,
+            n_heads=5,
+            dim_feedforward=8,
+            epochs=2,
+            batch_size=16,
         )
         det.fit(sample_multivariate_df.iloc[:70])
 

@@ -92,13 +92,9 @@ class LSTMForecasterMultivariateDetector:
         """arr: (n_timesteps, n_features) → X (n_windows, lookback, n_features), y (n_windows, n_features)."""
         T = self.lookback
         if len(arr) <= T:
-            raise DataValidationError(
-                f"Series length {len(arr)} too short for lookback={T}."
-            )
+            raise DataValidationError(f"Series length {len(arr)} too short for lookback={T}.")
         # Windows of length lookback+1: input is [:lookback], target is [lookback]
-        windows = np.lib.stride_tricks.sliding_window_view(
-            arr, (T + 1, arr.shape[1])
-        )
+        windows = np.lib.stride_tricks.sliding_window_view(arr, (T + 1, arr.shape[1]))
         windows = windows.squeeze(axis=1)  # (n_windows, T+1, n_features)
         X = windows[:, :T, :].astype(np.float32)  # (n_windows, T, n_features)
         y = windows[:, T, :].astype(np.float32)  # (n_windows, n_features)
@@ -118,10 +114,14 @@ class LSTMForecasterMultivariateDetector:
         X_win, y_win = self._make_windows(arr)
 
         dataset = TensorDataset(
-            torch.from_numpy(X_win), torch.from_numpy(y_win),
+            torch.from_numpy(X_win),
+            torch.from_numpy(y_win),
         )
         loader = DataLoader(
-            dataset, batch_size=self.batch_size, shuffle=True, drop_last=False,
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            drop_last=False,
         )
 
         self.model = MultivariateLSTMForecaster(
@@ -166,8 +166,10 @@ class LSTMForecasterMultivariateDetector:
         self.threshold_ = float(np.quantile(errors, self.error_quantile))
         logger.info(
             "Forecaster threshold: quantile(%.3f)=%.6f (train mean=%.6f, std=%.6f)",
-            self.error_quantile, self.threshold_,
-            float(np.mean(errors)), float(np.std(errors)),
+            self.error_quantile,
+            self.threshold_,
+            float(np.mean(errors)),
+            float(np.std(errors)),
         )
         self._trained = True
 
@@ -205,9 +207,7 @@ class LSTMForecasterMultivariateDetector:
     def predict(self, X: pd.DataFrame) -> pd.Series:
         scores = self.decision_function(X)
         threshold = (
-            self.threshold_
-            if self.threshold_ is not None
-            else scores.quantile(self.error_quantile)
+            self.threshold_ if self.threshold_ is not None else scores.quantile(self.error_quantile)
         )
         return (scores >= threshold).rename("is_anomaly")
 

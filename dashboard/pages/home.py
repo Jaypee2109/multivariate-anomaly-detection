@@ -16,7 +16,7 @@ _project_root = Path(__file__).resolve().parents[2]
 if str(_project_root / "src") not in sys.path:
     sys.path.insert(0, str(_project_root / "src"))
 
-from datasets import (
+from datasets import (  # noqa: E402
     add_anomaly_zones,
     discover_smd_models,
     discover_smd_results,
@@ -24,7 +24,7 @@ from datasets import (
     list_smd_machines,
     load_smd_results,
     load_smd_train_test,
-)  # noqa: E402
+)
 
 dash.register_page(__name__, path="/", name="Home", order=0)
 
@@ -122,17 +122,15 @@ layout = html.Div(
                                         [
                                             html.H6(
                                                 [
-                                                    html.I(
-                                                        className="bi bi-bullseye me-2"
-                                                    ),
+                                                    html.I(className="bi bi-bullseye me-2"),
                                                     "Goal",
                                                 ]
                                             ),
                                             html.P(
                                                 "Detect anomalous intervals in multivariate "
-                                                "server metrics using VAR residuals, "
-                                                "Isolation Forest, LSTM Autoencoder, and "
-                                                "LSTM Forecaster.",
+                                                "server metrics using "
+                                                "Isolation Forest, LSTM Autoencoder, "
+                                                "and TranAD.",
                                                 className="text-muted-light small",
                                             ),
                                         ],
@@ -146,9 +144,7 @@ layout = html.Div(
                                         [
                                             html.H6(
                                                 [
-                                                    html.I(
-                                                        className="bi bi-database me-2"
-                                                    ),
+                                                    html.I(className="bi bi-database me-2"),
                                                     "Datasets",
                                                 ]
                                             ),
@@ -168,9 +164,7 @@ layout = html.Div(
                                         [
                                             html.H6(
                                                 [
-                                                    html.I(
-                                                        className="bi bi-bar-chart-line me-2"
-                                                    ),
+                                                    html.I(className="bi bi-bar-chart-line me-2"),
                                                     "Metrics",
                                                 ]
                                             ),
@@ -318,16 +312,17 @@ def update_status(_n: int) -> tuple:
 
     if model_slugs:
         model_badges = [
-            dbc.Badge(slug, color="primary", className="me-1 mb-1")
-            for slug in model_slugs
+            dbc.Badge(slug, color="primary", className="me-1 mb-1") for slug in model_slugs
         ]
-        models_content = html.Div([
-            html.Div(model_badges),
-            html.Small(
-                f"{len(results)} machine(s) trained",
-                className="text-muted-light",
-            ),
-        ])
+        models_content = html.Div(
+            [
+                html.Div(model_badges),
+                html.Small(
+                    f"{len(results)} machine(s) trained",
+                    className="text-muted-light",
+                ),
+            ]
+        )
     else:
         models_content = html.Span(
             [html.I(className="bi bi-question-circle me-1"), "No models found"],

@@ -367,7 +367,8 @@ layout = html.Div(
     Input("ds-split", "value"),
 )
 def load_data(
-    machine_id: str | None, split: str,
+    machine_id: str | None,
+    split: str,
 ) -> tuple[dict | None, list, str | None]:
     """Load raw SMD data into the store, filtered by split."""
     if not machine_id:
@@ -388,7 +389,7 @@ def load_data(
     else:  # both
         df = pd.concat([train_df, test_df], ignore_index=True)
         labels = pd.Series(False, index=df.index)
-        labels.iloc[len(train_df):] = test_labels.values.astype(bool)
+        labels.iloc[len(train_df) :] = test_labels.values.astype(bool)
         df["is_anomaly"] = labels
 
     features = [c for c in df.columns if is_feature_column(c)]
@@ -418,7 +419,8 @@ def load_data(
     Input("ds-feature", "value"),
 )
 def update_statistics(
-    store: dict | None, feature: str | None,
+    store: dict | None,
+    feature: str | None,
 ) -> tuple:
     """Compute and display descriptive statistics for selected feature."""
     empty = html.Span("-", className="text-muted-light")
@@ -491,7 +493,9 @@ def update_statistics(
     Input("ds-show-labels", "value"),
 )
 def update_timeseries(
-    store: dict | None, feature: str | None, show_labels: bool,
+    store: dict | None,
+    feature: str | None,
+    show_labels: bool,
 ) -> go.Figure:
     """Render the time series with optional anomaly labels."""
     if not store or not feature:
@@ -529,7 +533,10 @@ def update_timeseries(
         )
         # Boundary line
         fig.add_vline(
-            x=n_train, line_dash="dash", line_color="#888888", line_width=1,
+            x=n_train,
+            line_dash="dash",
+            line_color="#888888",
+            line_width=1,
             annotation_text="Train / Test",
             annotation_font_color="#888888",
             annotation_font_size=10,
@@ -567,7 +574,8 @@ def update_timeseries(
     Input("ds-feature", "value"),
 )
 def update_distribution(
-    store: dict | None, feature: str | None,
+    store: dict | None,
+    feature: str | None,
 ) -> tuple[go.Figure, go.Figure]:
     """Render histogram and box plot for selected feature."""
     if not store or not feature:
@@ -610,7 +618,9 @@ def update_distribution(
     Input("rolling-tabs", "value"),
 )
 def update_rolling(
-    store: dict | None, feature: str | None, window_str: str,
+    store: dict | None,
+    feature: str | None,
+    window_str: str,
 ) -> go.Figure:
     """Render rolling mean and std."""
     if not store or not feature:
@@ -677,7 +687,8 @@ def update_rolling(
     Input("ds-feature", "value"),
 )
 def update_acf(
-    store: dict | None, feature: str | None,
+    store: dict | None,
+    feature: str | None,
 ) -> tuple[go.Figure, go.Figure]:
     """Render ACF and PACF bar charts."""
     if not store or not feature:

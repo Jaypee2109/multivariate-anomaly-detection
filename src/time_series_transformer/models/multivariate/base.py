@@ -49,7 +49,5 @@ class BaseMultivariateAnomalyDetector(ABC):
         path = Path(path)
         obj = joblib.load(path)
         if not isinstance(obj, BaseMultivariateAnomalyDetector):
-            raise TypeError(
-                f"Expected BaseMultivariateAnomalyDetector, got {type(obj).__name__}"
-            )
+            raise TypeError(f"Expected BaseMultivariateAnomalyDetector, got {type(obj).__name__}")
         return obj

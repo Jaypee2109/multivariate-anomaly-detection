@@ -1,9 +1,10 @@
 import torch
+import torch.nn.functional as F
+from datasets import load_dataset
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
-from datasets import load_dataset
-from scratch_transformer.transformer import TransformerModel, TransformerModelRotary
-import torch.nn.functional as F
+
+from scratch_transformer.transformer import TransformerModelRotary
 
 # -------------------------------
 # 1. Load dataset and build vocab
@@ -38,12 +39,8 @@ dropout = 0.2
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 print("Loading trained model weights...")
-model = TransformerModelRotary(ntokens, emsize, nhead, nhid, nlayers, dropout).to(
-    device
-)
-model.load_state_dict(
-    torch.load("transformer_best_20251106_000420.pt", map_location=device)
-)
+model = TransformerModelRotary(ntokens, emsize, nhead, nhid, nlayers, dropout).to(device)
+model.load_state_dict(torch.load("transformer_best_20251106_000420.pt", map_location=device))
 model.eval()
 
 
@@ -62,17 +59,13 @@ def generate_text(
 ):
     model.eval()
     tokens = tokenizer(prompt)
-    input_ids = torch.tensor(
-        [vocab[token] for token in tokens], dtype=torch.long
-    ).unsqueeze(1)
+    input_ids = torch.tensor([vocab[token] for token in tokens], dtype=torch.long).unsqueeze(1)
     input_ids = input_ids.to(next(model.parameters()).device)
     generated = input_ids
 
     with torch.no_grad():
         for _ in range(max_len):
-            src_mask = model.generate_square_subsequent_mask(generated.size(0)).to(
-                input_ids.device
-            )
+            src_mask = model.generate_square_subsequent_mask(generated.size(0)).to(input_ids.device)
             output = model(generated, src_mask)
             logits = output[-1, 0, :] / temperature
 
@@ -93,9 +86,7 @@ def generate_text(
             next_token = sorted_indices[torch.multinomial(probs, 1)]
             generated = torch.cat([generated, next_token.unsqueeze(0)], dim=0)
 
-    generated_tokens = [
-        vocab.lookup_token(token_id.item()) for token_id in generated.squeeze()
-    ]
+    generated_tokens = [vocab.lookup_token(token_id.item()) for token_id in generated.squeeze()]
     return " ".join(generated_tokens)
 
 
@@ -105,8 +96,6 @@ def generate_text(
 if __name__ == "__main__":
     prompt = "What is "
     print(f"\nPrompt: {prompt}")
-    generated_text = generate_text(
-        model, prompt, vocab, tokenizer, max_len=100, temperature=0.8
-    )
+    generated_text = generate_text(model, prompt, vocab, tokenizer, max_len=100, temperature=0.8)
     print("\nGenerated text:")
     print(generated_text)

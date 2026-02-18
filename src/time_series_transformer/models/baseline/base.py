@@ -50,7 +50,5 @@ class BaseAnomalyDetector(ABC):
         path = Path(path)
         obj = joblib.load(path)
         if not isinstance(obj, BaseAnomalyDetector):
-            raise TypeError(
-                f"Expected a BaseAnomalyDetector subclass, got {type(obj).__name__}"
-            )
+            raise TypeError(f"Expected a BaseAnomalyDetector subclass, got {type(obj).__name__}")
         return obj

@@ -115,9 +115,7 @@ class LSTMAutoencoderAnomalyDetector:
         """arr: (n_timesteps, n_features) → (n_windows, lookback, n_features)"""
         T = self.lookback
         if len(arr) <= T:
-            raise DataValidationError(
-                f"Series length {len(arr)} too short for lookback={T}."
-            )
+            raise DataValidationError(f"Series length {len(arr)} too short for lookback={T}.")
         windows = np.lib.stride_tricks.sliding_window_view(arr, (T, arr.shape[1]))
         # sliding_window_view produces (n_windows, 1, T, n_features) — squeeze
         return windows.squeeze(axis=1).astype(np.float32)
@@ -147,7 +145,10 @@ class LSTMAutoencoderAnomalyDetector:
 
         dataset = TensorDataset(torch.from_numpy(windows))
         loader = DataLoader(
-            dataset, batch_size=self.batch_size, shuffle=True, drop_last=False,
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            drop_last=False,
         )
 
         self.model = LSTMAutoencoder(
@@ -195,8 +196,10 @@ class LSTMAutoencoderAnomalyDetector:
         self.threshold_ = float(np.quantile(train_scores, self.error_quantile))
         logger.info(
             "AE threshold: quantile(%.3f)=%.6f (train mean=%.6f, std=%.6f)",
-            self.error_quantile, self.threshold_,
-            float(np.mean(train_scores)), float(np.std(train_scores)),
+            self.error_quantile,
+            self.threshold_,
+            float(np.mean(train_scores)),
+            float(np.std(train_scores)),
         )
         self._trained = True
 
@@ -223,7 +226,9 @@ class LSTMAutoencoderAnomalyDetector:
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
         scores = self.decision_function(X)
-        threshold = self.threshold_ if self.threshold_ is not None else scores.quantile(self.error_quantile)
+        threshold = (
+            self.threshold_ if self.threshold_ is not None else scores.quantile(self.error_quantile)
+        )
         return (scores >= threshold).rename("is_anomaly")
 
     # ------------------------------------------------------------------ checkpointing

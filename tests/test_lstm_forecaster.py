@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 import torch
 
 
@@ -15,7 +14,9 @@ class TestMultivariateLSTMForecasterModel:
 
         n_features = 5
         model = MultivariateLSTMForecaster(
-            n_features=n_features, hidden_size=16, num_layers=1,
+            n_features=n_features,
+            hidden_size=16,
+            num_layers=1,
         )
         x = torch.randn(4, 10, n_features)  # (batch=4, seq_len=10, features=5)
         out = model(x)
@@ -29,7 +30,10 @@ class TestLSTMForecasterDetector:
         )
 
         det = LSTMForecasterMultivariateDetector(
-            lookback=10, hidden_size=16, epochs=2, batch_size=16,
+            lookback=10,
+            hidden_size=16,
+            epochs=2,
+            batch_size=16,
         )
         train = sample_multivariate_df.iloc[:70]
         test = sample_multivariate_df.iloc[70:]
@@ -49,7 +53,10 @@ class TestLSTMForecasterDetector:
         )
 
         det = LSTMForecasterMultivariateDetector(
-            lookback=10, hidden_size=16, epochs=2, batch_size=16,
+            lookback=10,
+            hidden_size=16,
+            epochs=2,
+            batch_size=16,
         )
         det.fit(sample_multivariate_df.iloc[:70])
 
