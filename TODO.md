@@ -12,7 +12,8 @@
 - [x] AUROC / AUPRC — `evaluation.py`
 - [x] **Dynamic evaluation framework** — `benchmark/` package + `benchmark` CLI command
       (`python -m time_series_transformer benchmark --dataset nab --mlflow`) - Model registry with `register_model()` for adding new models - Multi-dataset support with auto NAB discovery - Console table + CSV export
-- [ ] Add new models to registry (TranAD, custom transformer, ...)
+- [x] Add TranAD to multivariate pipeline and registry (D18)
+- [ ] Custom transformer detector (partner WIP)
 
 ## Inference / MLOps
 

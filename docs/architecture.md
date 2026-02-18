@@ -30,13 +30,16 @@ Transformer/
     ├── time_series_transformer/   # Main package
     │   ├── __main__.py            # python -m entry point
     │   ├── config.py              # Central config (env-var overridable)
-    │   ├── baseline_pipeline.py   # Orchestrates baseline model training
+    │   ├── baseline_pipeline.py   # Orchestrates univariate model training
+│   ├── multivariate_pipeline.py # Orchestrates multivariate model training (SMD)
     │   ├── evaluation.py          # Point + range anomaly metrics
     │   ├── mlflow_utils.py        # MLflow setup, logging helpers
     │   ├── split.py               # Time-ordered train/test split
     │   ├── cli/                   # Subcommand-based CLI
     │   ├── data_pipeline/         # Download, load, preprocess, save
-    │   ├── models/baseline/       # Anomaly detector implementations
+    │   ├── models/
+│   │   ├── baseline/          # Univariate detectors
+│   │   └── multivariate/      # Multivariate detectors (IF, LSTM-AE, TranAD, VAR, LSTM-FC)
     │   ├── api/                   # FastAPI inference server
     │   ├── benchmark/             # Model registry + benchmark runner
     │   ├── analysis/              # EDA and visualization
@@ -52,9 +55,9 @@ Transformer/
 
 Installable via `pip install -e .`. All imports use the `time_series_transformer.*` namespace.
 
-### `scratch_transformer` / `scratch_time_series_transformer` (partner WIP)
+### `scratch_transformer` / `scratch_time_series_transformer` (experimental)
 
-Transformer model code being developed by a project partner. Contains an NLP word-level transformer and an early time-series transformer prototype. **Not yet integrated** into the main package or CLI. Once the transformer detector is ready it will implement `BaseAnomalyDetector` and be added to `models/`.
+Standalone transformer experiments. Contains an NLP word-level transformer and an early time-series transformer prototype. These are **not part of the main package** — the production transformer model is TranAD in `models/multivariate/tranad.py`.
 
 ## Key Modules
 
@@ -113,14 +116,22 @@ Convention: higher scores = more anomalous.
 
 All follow the same `fit() / predict() / decision_function()` interface (via `BaseMultivariateAnomalyDetector` or `@dataclass`). Designed for the SMD dataset (38 features, pre-normalised to [0, 1]).
 
+Default models (built by `train-mv` without `--model` filter):
+
+| Model                                  | Approach                                       |
+|----------------------------------------|------------------------------------------------|
+| `MultivariateIsolationForestDetector`  | Scikit-learn ensemble on raw multivariate features |
+| `LSTMAutoencoderAnomalyDetector`       | LSTM autoencoder reconstruction error, quantile threshold |
+| `TranADAnomalyDetector`               | Transformer encoder + dual decoder with self-conditioning (VLDB 2022) |
+
+Optional models (available via `--model var` / `--model lstm_forecaster`):
+
 | Model                                  | Approach                                       |
 |----------------------------------------|------------------------------------------------|
 | `VARResidualAnomalyDetector`           | VAR(p) forecast residual z-scores, max/mean aggregation |
-| `MultivariateIsolationForestDetector`  | Scikit-learn ensemble on raw multivariate features |
-| `LSTMAutoencoderAnomalyDetector`       | LSTM autoencoder reconstruction error, quantile threshold |
 | `LSTMForecasterMultivariateDetector`   | LSTM next-step forecast error, quantile threshold |
 
-LSTM models use MSE for both training loss and anomaly scoring. Thresholds are computed as quantiles of training-set scores (overlap-averaged for the autoencoder). See decisions D14–D17 for rationale.
+LSTM models use MSE for both training loss and anomaly scoring. Thresholds are computed as quantiles of training-set scores (overlap-averaged for the autoencoder). TranAD uses AdamW + StepLR with the original paper's loss weighting `(1/epoch)*MSE(x1) + (1-1/epoch)*MSE(x2)`. See decisions D14–D18 for rationale.
 
 ### `evaluation.py` — Metrics
 
@@ -173,7 +184,7 @@ The server loads trained model checkpoints on startup and exposes them for infer
 Systematic evaluation of models across multiple datasets.
 
 - `dataset_spec.py`: `DatasetSpec` dataclass (name, csv_path, optional labels)
-- `registry.py`: Model factory registry — `register_model(name, factory)`, `get_factory(name)`, `list_models()`. Auto-registers built-in models (arima, isolation_forest, lstm, rolling_zscore)
+- `registry.py`: Model factory registry — `register_model(name, factory)`, `get_factory(name)`, `list_models()`. Auto-registers univariate (arima, isolation_forest, lstm, rolling_zscore) and multivariate models (var, multi_isolation_forest, lstm_autoencoder, lstm_forecaster, tranad)
 - `runner.py`: `BenchmarkRunner` — iterates models x datasets, collects metrics with error-tolerant execution
 - `results.py`: `BenchmarkResult` dataclass + `ResultsCollector` (DataFrame export, CSV, console table)
 

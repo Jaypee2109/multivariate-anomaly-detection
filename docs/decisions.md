@@ -421,3 +421,68 @@ Overlap-averaging smooths scores, producing values in a different range than the
 - Point-adjust F1 criticism: Kim et al., "Towards a Rigorous Evaluation of Time-Series Anomaly Detection," AAAI 2022.
 - MAE vs MSE for scoring: Kieu et al., "Federated LSTM autoencoders for time series anomaly detection in production-scale HPC systems," Knowledge-Based Systems, 2025. [ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0950705125020817)
 - Threshold sensitivity on SMD: Schmidl et al., "MTAD: Tools and Benchmarks for Multivariate Time Series Anomaly Detection," 2024. [arXiv:2401.06175](https://arxiv.org/pdf/2401.06175)
+
+---
+
+## D18: TranAD integration as reference baseline
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** We needed a transformer-based anomaly detector as a reference baseline to compare against our LSTM models. TranAD (Tuli et al., VLDB 2022) is a well-known deep learning model for multivariate time series anomaly detection on SMD.
+
+**Decision:** Copy the original TranAD implementation from [imperial-qore/TranAD](https://github.com/imperial-qore/TranAD) and adapt it minimally to fit our project's API (`fit` / `predict` / `decision_function`).
+
+**Architecture (copied from original):**
+
+- Custom `TransformerEncoderLayer` and `TransformerDecoderLayer` — no LayerNorm, LeakyReLU instead of ReLU (differs from PyTorch built-in layers)
+- `PositionalEncoding` — adds sin+cos to all dimensions (non-standard interleaving)
+- Self-conditioning: Phase 1 reconstructs with zero conditioning, Phase 2 feeds squared error from Phase 1 as context to a second decoder
+- Loss: `(1/epoch) * MSE(x1, target) + (1 - 1/epoch) * MSE(x2, target)` — shifts weight from decoder 1 to decoder 2 over training
+- Optimizer: AdamW with weight_decay=1e-5, StepLR scheduler (step_size=5, gamma=0.9)
+
+**Hyperparameters (matching original for SMD):** lr=1e-4, batch=128, n_window=10, d_model=2×n_features, nhead=n_features, dim_feedforward=16, dropout=0.1, num_layers=1, epochs=15.
+
+**Results on machine-1-1:**
+
+| Metric | Isolation Forest | LSTM Autoencoder | TranAD |
+|--------|-----------------|------------------|--------|
+| Point F1 | 0.344 | 0.568 | **0.745** |
+| AUC-ROC | 0.823 | 0.932 | **0.967** |
+| AUC-PR | 0.366 | 0.613 | **0.773** |
+| PA-F1 | 0.673 | 0.800 | **0.904** |
+| Missed segments | 3/8 | 0/8 | **0/8** |
+
+**Consequences:**
+
+- `models/multivariate/tranad.py` created with `TranADModel` (nn.Module) + `TranADAnomalyDetector` (dataclass wrapper)
+- `TRANAD_*` config values added to `config.py`
+- Registered in pipeline, CLI, and benchmark registry
+- 4 unit tests in `tests/test_tranad.py`
+
+**References:**
+
+- Tuli et al., "TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data," VLDB 2022. [GitHub](https://github.com/imperial-qore/TranAD)
+
+---
+
+## D19: VAR and LSTM Forecaster made optional
+
+**Date:** 2026-02
+**Status:** Accepted
+
+**Context:** With TranAD integrated, the default pipeline ran 5 multivariate models. VAR frequently failed on certain machines (non-positive-definite covariance), and LSTM Forecaster was redundant alongside LSTM Autoencoder for the "LSTM vs Transformer" comparison.
+
+**Decision:** Keep 3 default models (Isolation Forest, LSTM Autoencoder, TranAD) and make VAR and LSTM Forecaster optional. They are still available via `--model var` or `--model lstm_forecaster` but are not built by default.
+
+**Rationale:**
+
+- **Isolation Forest** — simple non-DL baseline (no temporal modelling)
+- **LSTM Autoencoder** — DL reconstruction baseline (same paradigm as TranAD, enabling a clean LSTM-vs-Transformer comparison)
+- **TranAD** — transformer-based reference model
+
+**Consequences:**
+
+- `_DEFAULT_MODELS` set added to `multivariate_pipeline.py`
+- VAR and LSTM Forecaster imports moved to lazy (only loaded when requested)
+- Code, tests, config, and registry entries preserved — nothing deleted

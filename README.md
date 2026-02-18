@@ -1,6 +1,6 @@
 # Time Series Transformer
 
-Anomaly detection on time series data. The project combines statistical/ML baselines (ARIMA, Isolation Forest, LSTM) with a transformer-based detector currently being developed by a project partner.
+Anomaly detection on time series data. The project provides statistical/ML baselines (ARIMA, Isolation Forest, LSTM) for univariate data and multivariate anomaly detectors (Isolation Forest, LSTM Autoencoder, TranAD) for the SMD dataset, plus an interactive dashboard and inference API.
 
 ## Requirements
 
@@ -69,7 +69,8 @@ All commands are run via `python -m time_series_transformer <command>`.
 | Command     | Description                              | Key flags                                                             |
 | ----------- | ---------------------------------------- | --------------------------------------------------------------------- |
 | `data`      | Download and preprocess Kaggle datasets  | `--dataset {nab,smd_onmiad,nasa_smap_msl}`                            |
-| `train`     | Train baseline anomaly detectors         | `--csv`, `--labels`, `--labels-key`, `--save-checkpoints`, `--mlflow` |
+| `train`     | Train univariate baseline detectors      | `--csv`, `--labels`, `--labels-key`, `--save-checkpoints`, `--mlflow` |
+| `train-mv`  | Train multivariate detectors on SMD      | `--machine`, `--model`, `--save-checkpoints`                          |
 | `benchmark` | Evaluate models across multiple datasets | `--config YAML`, `--csv`, `--model`, `--mlflow`                       |
 | `serve`     | Start FastAPI inference server           | `--host`, `--port`, `--reload`                                        |
 | `dashboard` | Start interactive Plotly Dash dashboard  | `--host`, `--port`, `--debug`                                         |
@@ -105,7 +106,7 @@ Data is downloaded to `data/raw/`, preprocessed to `data/processed/`. Both direc
 
 ## Models
 
-### Baselines (implemented)
+### Univariate Baselines
 
 All baseline models implement the `BaseAnomalyDetector` interface (`fit`, `predict`, `decision_function`):
 
@@ -116,16 +117,38 @@ All baseline models implement the `BaseAnomalyDetector` interface (`fit`, `predi
 | LSTM Forecast    | PyTorch LSTM, forecast-error quantile            |
 | Rolling Z-Score  | Rolling mean/std threshold (disabled by default) |
 
-### Transformer (work in progress)
+### Multivariate Detectors (SMD)
 
-A transformer-based anomaly detector is being developed by a project partner. Prototype code lives in `src/scratch_transformer/` and `src/scratch_time_series_transformer/` but is **not yet integrated** into the main package or CLI. Once ready it will implement `BaseAnomalyDetector` and plug into the existing pipeline.
+Multivariate models implement `BaseMultivariateAnomalyDetector` and target the SMD dataset (28 server machines, 38 features each, pre-normalised to [0, 1]).
+
+Default models (run with `train-mv`):
+
+| Model              | Approach                                                    |
+| ------------------ | ----------------------------------------------------------- |
+| Isolation Forest   | Scikit-learn ensemble on raw multivariate features          |
+| LSTM Autoencoder   | LSTM autoencoder reconstruction error, quantile threshold   |
+| TranAD             | Transformer encoder + dual decoder with self-conditioning (VLDB 2022) |
+
+Optional models (available via `--model var` / `--model lstm_forecaster`):
+
+| Model              | Approach                                                    |
+| ------------------ | ----------------------------------------------------------- |
+| VAR Residual       | VAR(p) forecast residual z-scores                           |
+| LSTM Forecaster    | LSTM next-step forecast error, quantile threshold           |
+
+### Experimental Transformers
+
+Prototype transformer code lives in `src/scratch_transformer/` (NLP) and `src/scratch_time_series_transformer/` (time series). These are standalone experiments, not part of the main package.
 
 ## Evaluation Metrics
 
 - **Point-level**: precision, recall, F1, AUC-ROC, AUC-PR
+- **Point-adjust**: PA precision, recall, F1 (if any point in an anomaly segment is flagged, the whole segment counts as detected — standard protocol in OmniAnomaly/TranAD)
+- **Best-F1**: optimal threshold search over anomaly scores, with corresponding PA-F1
+- **Detection latency**: mean/median delay before each anomaly segment is first flagged, plus segment detection counts
 - **Range-level**: precision, recall, F1 over contiguous anomaly ranges
 
-Both are printed to stdout and logged to MLflow when `--mlflow` is used.
+Metrics are printed to stdout. Univariate metrics are also logged to MLflow when `--mlflow` is used.
 
 ## Benchmark Framework
 
@@ -347,18 +370,21 @@ src/
 ├── time_series_transformer/        # Main package (pip install -e .)
 │   ├── cli/                        # Subcommand-based CLI
 │   ├── data_pipeline/              # Download, load, preprocess, save
-│   ├── models/baseline/            # Anomaly detector implementations
+│   ├── models/
+│   │   ├── baseline/               # Univariate detectors (ARIMA, IF, LSTM, Z-Score)
+│   │   └── multivariate/           # Multivariate detectors (IF, LSTM-AE, TranAD, VAR, LSTM-FC)
 │   ├── api/                        # FastAPI inference server
 │   ├── benchmark/                  # Model registry + benchmark runner
 │   ├── analysis/                   # EDA and visualization
 │   ├── utils/                      # I/O, startup checks, data validation
 │   ├── config.py                   # Central configuration
-│   ├── baseline_pipeline.py        # Training orchestrator
-│   ├── evaluation.py               # Point + range metrics
+│   ├── baseline_pipeline.py        # Univariate training orchestrator
+│   ├── multivariate_pipeline.py    # Multivariate training orchestrator (SMD)
+│   ├── evaluation.py               # Point, point-adjust, range, latency metrics
 │   ├── mlflow_utils.py             # MLflow logging helpers
 │   └── split.py                    # Time-ordered train/test split
-├── scratch_transformer/            # Partner WIP: NLP transformer experiments
-└── scratch_time_series_transformer/ # Partner WIP: time-series transformer prototype
+├── scratch_transformer/            # Experimental NLP transformer
+└── scratch_time_series_transformer/ # Experimental time-series transformer
 
 dashboard/                          # Plotly Dash interactive dashboard
 ├── app.py                          # Main Dash app with multi-page routing
