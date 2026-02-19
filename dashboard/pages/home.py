@@ -28,6 +28,17 @@ from datasets import (  # noqa: E402
 
 dash.register_page(__name__, path="/", name="Home", order=0)
 
+_DISPLAY_NAMES = {
+    "custom_transformer_t2v": "Custom Transformer",
+    "isolation_forest_mv": "Isolation Forest",
+    "lstm_autoencoder": "LSTM Autoencoder",
+    "tranad": "TranAD",
+}
+
+
+def _display_name(model: str) -> str:
+    return _DISPLAY_NAMES.get(model, model)
+
 # ---------------------------------------------------------------------------
 # Chart theme
 # ---------------------------------------------------------------------------
@@ -150,7 +161,8 @@ layout = html.Div(
                                             ),
                                             html.P(
                                                 "SMD (Server Machine Dataset) — "
-                                                "28 machines with 38 sensor features each.",
+                                                "28 machines with 38 sensor features each, "
+                                                "~5 weeks at 1-min intervals per machine.",
                                                 className="text-muted-light small",
                                             ),
                                         ],
@@ -169,8 +181,9 @@ layout = html.Div(
                                                 ]
                                             ),
                                             html.P(
-                                                "F1, Precision, Recall, AUROC — "
-                                                "evaluated point-wise on the test split.",
+                                                "Segment-aware evaluation on the test split "
+                                                "using AUC-ROC, Point-Adjusted F1, "
+                                                "Precision, and Recall.",
                                                 className="text-muted-light small",
                                             ),
                                         ],
@@ -204,7 +217,7 @@ layout = html.Div(
                         ),
                         dcc.Interval(
                             id="status-interval",
-                            interval=10_000,
+                            interval=60_000,
                             n_intervals=0,
                         ),
                     ],
@@ -312,7 +325,7 @@ def update_status(_n: int) -> tuple:
 
     if model_slugs:
         model_badges = [
-            dbc.Badge(slug, color="primary", className="me-1 mb-1") for slug in model_slugs
+            dbc.Badge(_display_name(slug), color="primary", className="me-1 mb-1") for slug in model_slugs
         ]
         models_content = html.Div(
             [

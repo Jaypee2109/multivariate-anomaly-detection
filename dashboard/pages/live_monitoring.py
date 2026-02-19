@@ -34,6 +34,17 @@ _last_model_status: str | None = None
 
 dash.register_page(__name__, path="/live", name="Live Monitoring", order=3)
 
+_DISPLAY_NAMES = {
+    "custom_transformer_t2v": "Custom Transformer",
+    "isolation_forest_mv": "Isolation Forest",
+    "lstm_autoencoder": "LSTM Autoencoder",
+    "tranad": "TranAD",
+}
+
+
+def _display_name(model: str) -> str:
+    return _DISPLAY_NAMES.get(model, model)
+
 # ---------------------------------------------------------------------------
 # Chart theme
 # ---------------------------------------------------------------------------
@@ -141,7 +152,7 @@ def _controls_section() -> dbc.Container:
                                 clearable=False,
                             ),
                         ],
-                        md=1,
+                        md=2,
                     ),
                     # Playback controls
                     dbc.Col(
@@ -404,7 +415,7 @@ def populate_models(
     global _last_model_status  # noqa: PLW0603
     _last_model_status = None
 
-    options = [{"label": slug, "value": slug} for slug in sorted(model_slugs)]
+    options = [{"label": _display_name(slug), "value": slug} for slug in sorted(model_slugs)]
 
     # Preserve current selection if still valid, otherwise pick first
     value = current_selection if current_selection in model_slugs else sorted(model_slugs)[0]
@@ -774,7 +785,7 @@ def _build_init_figure(
                     x=[],
                     y=[],
                     mode="markers",
-                    name=model_slug,
+                    name=_display_name(model_slug),
                     marker={"color": color, "size": 6, "symbol": "x"},
                     legendgroup=model_slug,
                 ),
@@ -786,7 +797,7 @@ def _build_init_figure(
                     x=[],
                     y=[],
                     mode="lines",
-                    name=f"{model_slug} (score)",
+                    name=f"{_display_name(model_slug)} (score)",
                     line={"color": color, "width": 1.5},
                     legendgroup=model_slug,
                     showlegend=False,
@@ -818,7 +829,7 @@ def _build_init_figure(
                 x=marker_x,
                 y=marker_y,
                 mode="markers",
-                name=model_slug,
+                name=_display_name(model_slug),
                 marker={"color": color, "size": 6, "symbol": "x"},
                 hovertemplate="%{x}<br>Value: %{y:.4g}<extra>%{fullData.name}</extra>",
                 legendgroup=model_slug,
@@ -834,7 +845,7 @@ def _build_init_figure(
                 x=ts_win,
                 y=score_vals,
                 mode="lines",
-                name=f"{model_slug} (score)",
+                name=f"{_display_name(model_slug)} (score)",
                 line={"color": color, "width": 1.5},
                 legendgroup=model_slug,
                 showlegend=False,
@@ -1021,7 +1032,7 @@ def _build_model_summary(
                                     "marginRight": "8px",
                                 }
                             ),
-                            slug,
+                            _display_name(slug),
                         ],
                         className="card-title mb-2",
                     ),

@@ -41,6 +41,18 @@ dash.register_page(__name__, path="/models", name="Model Analysis", order=2)
 # Chart theme
 # ---------------------------------------------------------------------------
 
+_DISPLAY_NAMES = {
+    "custom_transformer_t2v": "Custom Transformer",
+    "isolation_forest_mv": "Isolation Forest",
+    "lstm_autoencoder": "LSTM Autoencoder",
+    "tranad": "TranAD",
+}
+
+
+def _display_name(model: str) -> str:
+    return _DISPLAY_NAMES.get(model, model)
+
+
 _DARK_LAYOUT = dict(
     template="plotly_dark",
     paper_bgcolor="#111111",
@@ -328,7 +340,7 @@ def update_selectors(
                             "marginRight": "6px",
                         }
                     ),
-                    html.Span(m),
+                    html.Span(_display_name(m)),
                 ]
             ),
             "value": m,
@@ -357,6 +369,7 @@ def update_metric_bars(store: dict | None, selected: list[str]) -> tuple:
     df = pd.read_json(io.StringIO(store["artifacts"]), orient="split")
     models = store.get("models", [])
     color_map = store.get("color_map", {})
+    display_color_map = {_display_name(k): v for k, v in color_map.items()}
     selected = enforce_min_one(selected, models)
 
     if "is_anomaly" not in df.columns:
@@ -403,7 +416,7 @@ def update_metric_bars(store: dict | None, selected: list[str]) -> tuple:
 
         rows.append(
             {
-                "model": model,
+                "model": _display_name(model),
                 "F1": f1,
                 "Precision": prec,
                 "Recall": rec,
@@ -428,10 +441,13 @@ def update_metric_bars(store: dict | None, selected: list[str]) -> tuple:
             x="model",
             y=metric,
             color="model",
-            color_discrete_map=color_map,
+            color_discrete_map=display_color_map,
             category_orders={"model": model_order},
             labels={"model": "", metric: metric},
             title=metric,
+        )
+        fig.update_traces(
+            hovertemplate="%{y:.3f}<extra>%{x}</extra>",
         )
         fig.update_layout(**_DARK_LAYOUT, showlegend=False, bargap=0.3)
         figs.append(fig)
@@ -522,7 +538,7 @@ def update_timeseries(
                 x=anom_idx,
                 y=df[feature].iloc[anom_idx],
                 mode="markers",
-                name=model,
+                name=_display_name(model),
                 marker={"color": color, "size": 6, "symbol": "x"},
                 text=hover,
                 hovertemplate="%{x}<br>Value: %{y:.4g}<br>%{text}<extra>%{fullData.name}</extra>"
@@ -546,7 +562,7 @@ def update_timeseries(
                 x=x_axis,
                 y=pd.to_numeric(df[score_col], errors="coerce"),
                 mode="lines",
-                name=f"{model} (score)",
+                name=f"{_display_name(model)} (score)",
                 line={"color": color, "width": 1.5},
                 legendgroup=model,
                 showlegend=False,
@@ -603,7 +619,7 @@ def update_distributions(store: dict | None, selected: list[str]) -> go.Figure:
         fig.add_trace(
             go.Histogram(
                 x=scores,
-                name=model,
+                name=_display_name(model),
                 marker_color=color_map.get(model, "#636efa"),
                 opacity=0.6,
                 nbinsx=60,
