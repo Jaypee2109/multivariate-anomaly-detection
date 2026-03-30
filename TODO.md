@@ -2,8 +2,8 @@
 
 ## Datasets
 
-- [ ] Consider dropping NAB — too few labels for proper evaluation.
-- [ ] Verify SMAP/MSL and SMD label coverage is sufficient for all metrics
+- [x] Consider dropping NAB — too few labels for proper evaluation.
+- [x] Verify SMAP/MSL and SMD label coverage is sufficient for all metrics
 
 ## Evaluation Framework
 
@@ -13,7 +13,7 @@
 - [x] **Dynamic evaluation framework** — `benchmark/` package + `benchmark` CLI command
       (`python -m time_series_transformer benchmark --dataset nab --mlflow`) - Model registry with `register_model()` for adding new models - Multi-dataset support with auto NAB discovery - Console table + CSV export
 - [x] Add TranAD to multivariate pipeline and registry (D18)
-- [ ] Custom transformer detector (partner WIP)
+- [x] Custom transformer detector (partner WIP)
 
 ## Inference / MLOps
 
