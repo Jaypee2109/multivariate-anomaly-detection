@@ -404,7 +404,6 @@ docker-compose.yml                  # Orchestrates all three services
 ```
 
 See [docs/architecture.md](docs/architecture.md) for detailed architecture and data flow.
-See [docs/decisions.md](docs/decisions.md) for design decision log.
 
 ## Adding Dependencies
 

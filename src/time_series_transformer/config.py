@@ -153,7 +153,7 @@ MULTI_ISO_CONTAMINATION = _env_float("MULTI_ISO_CONTAMINATION", 0.01)
 # LSTM Autoencoder (multivariate)
 # ---------------------------------------------------------------------------
 
-LSTM_AE_LOOKBACK = _env_int("LSTM_AE_LOOKBACK", 10)
+LSTM_AE_LOOKBACK = _env_int("LSTM_AE_LOOKBACK", 30)
 LSTM_AE_HIDDEN_SIZE = _env_int("LSTM_AE_HIDDEN_SIZE", 64)
 LSTM_AE_LATENT_DIM = _env_int("LSTM_AE_LATENT_DIM", 32)
 LSTM_AE_NUM_LAYERS = _env_int("LSTM_AE_NUM_LAYERS", 1)
@@ -168,7 +168,7 @@ LSTM_AE_SCORE_METRIC = _env_str("LSTM_AE_SCORE_METRIC", "mse")
 # LSTM Forecaster (multivariate)
 # ---------------------------------------------------------------------------
 
-LSTM_FC_LOOKBACK = _env_int("LSTM_FC_LOOKBACK", 10)
+LSTM_FC_LOOKBACK = _env_int("LSTM_FC_LOOKBACK", 30)
 LSTM_FC_HIDDEN_SIZE = _env_int("LSTM_FC_HIDDEN_SIZE", 64)
 LSTM_FC_NUM_LAYERS = _env_int("LSTM_FC_NUM_LAYERS", 1)
 LSTM_FC_DROPOUT = _env_float("LSTM_FC_DROPOUT", 0.0)
@@ -182,7 +182,7 @@ LSTM_FC_SCORE_METRIC = _env_str("LSTM_FC_SCORE_METRIC", "mse")
 # TranAD (multivariate)
 # ---------------------------------------------------------------------------
 
-TRANAD_LOOKBACK = _env_int("TRANAD_LOOKBACK", 10)
+TRANAD_LOOKBACK = _env_int("TRANAD_LOOKBACK", 30)
 TRANAD_N_HEADS = _env_int("TRANAD_N_HEADS", 0)  # 0 = auto (n_features)
 TRANAD_DIM_FF = _env_int("TRANAD_DIM_FF", 16)
 TRANAD_NUM_LAYERS = _env_int("TRANAD_NUM_LAYERS", 1)
