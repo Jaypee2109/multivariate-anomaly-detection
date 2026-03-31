@@ -14,7 +14,7 @@ Multivariate time series anomaly detection on the [Server Machine Dataset (SMD)]
 
 ```bash
 git clone https://github.com/Jaypee2109/multivariate-anomaly-detection.git
-cd Transformer
+cd multivariate-anomaly-detection
 python -m venv .venv
 source .venv/bin/activate            # Windows: .\.venv\Scripts\Activate.ps1
 pip install -e .
