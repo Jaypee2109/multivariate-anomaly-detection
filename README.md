@@ -11,8 +11,8 @@ Anomaly detection on time series data. The project provides statistical/ML basel
 ## Installation
 
 ```bash
-git clone <REPO-URL>
-cd Transformer
+git clone https://github.com/Jaypee2109/multivariate-anomaly-detection.git
+cd multivariate-anomaly-detection
 
 python -m venv .venv
 
