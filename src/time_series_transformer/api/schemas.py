@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 class HealthResponse(BaseModel):
     status: str
     models_loaded: list[str]
+    mv_machines: list[str] = []
     timestamp: str
 
 
@@ -31,6 +32,7 @@ class ModelDetail(BaseModel):
 
 class ModelsInfoResponse(BaseModel):
     models: list[ModelDetail]
+    mv_machines: list[str] = []
     checkpoint_dir: str
 
 

@@ -40,6 +40,9 @@ from time_series_transformer.api.schemas import (
 )
 from time_series_transformer.config import ARTIFACTS_DIR, SMD_BASE_DIR
 from time_series_transformer.exceptions import TransformerError
+from time_series_transformer.models.multivariate.custom_transformer import (
+    CustomTransformerDetector,
+)
 from time_series_transformer.models.multivariate.isolation_forest import (
     MultivariateIsolationForestDetector,
 )
@@ -49,6 +52,7 @@ from time_series_transformer.models.multivariate.lstm_autoencoder import (
 from time_series_transformer.models.multivariate.lstm_forecaster import (
     LSTMForecasterMultivariateDetector,
 )
+from time_series_transformer.models.multivariate.tranad import TranADAnomalyDetector
 from time_series_transformer.models.multivariate.var import VARResidualAnomalyDetector
 
 logger = logging.getLogger(__name__)
@@ -59,18 +63,46 @@ logger = logging.getLogger(__name__)
 
 manager = ModelManager()
 
+# Multivariate machines discovered at startup
+_mv_machines: list[str] = []
+
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Load model checkpoints on startup."""
+    # --- Univariate baselines (optional / legacy) ---
     checkpoint_dir = Path(
         os.environ.get("ANOMALY_CHECKPOINT_DIR", str(ARTIFACTS_DIR / "checkpoints"))
     )
     if checkpoint_dir.exists():
         loaded = manager.load_from_directory(checkpoint_dir)
-        logger.info("Loaded %d model(s) from %s: %s", len(loaded), checkpoint_dir, loaded)
+        if loaded:
+            logger.info("Loaded %d univariate model(s): %s", len(loaded), loaded)
+
+    # --- Multivariate models — discover available machines ---
+    mv_ckpt_dir = ARTIFACTS_DIR / "checkpoints" / "multivariate"
+    mv_artifact_dir = ARTIFACTS_DIR / "multivariate"
+
+    machines: set[str] = set()
+    if mv_ckpt_dir.exists():
+        machines.update(p.name for p in mv_ckpt_dir.iterdir() if p.is_dir())
+    if mv_artifact_dir.exists():
+        machines.update(
+            p.stem.replace("_results", "") for p in mv_artifact_dir.glob("*_results.csv")
+        )
+
+    _mv_machines.clear()
+    _mv_machines.extend(sorted(machines))
+
+    if _mv_machines:
+        logger.info(
+            "Discovered %d multivariate machine(s), e.g. %s",
+            len(_mv_machines),
+            _mv_machines[:5],
+        )
     else:
-        logger.warning("Checkpoint directory not found: %s", checkpoint_dir)
+        logger.warning("No multivariate models found in %s or %s", mv_ckpt_dir, mv_artifact_dir)
+
     yield
 
 
@@ -183,19 +215,25 @@ def _run_detection(
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
+    has_models = bool(manager.loaded_model_names) or bool(_mv_machines)
     return HealthResponse(
-        status="healthy" if manager.loaded_model_names else "no_models_loaded",
+        status="healthy" if has_models else "no_models_loaded",
         models_loaded=manager.loaded_model_names,
+        mv_machines=_mv_machines,
         timestamp=datetime.now().isoformat(),
     )
 
 
 @app.get("/models", response_model=ModelsInfoResponse)
 async def get_models() -> ModelsInfoResponse:
-    if not manager.loaded_model_names:
+    if not manager.loaded_model_names and not _mv_machines:
         raise HTTPException(status_code=503, detail="No models loaded")
     details = [ModelDetail(**manager.get_model_info(slug)) for slug in manager.loaded_model_names]
-    return ModelsInfoResponse(models=details, checkpoint_dir=manager.checkpoint_dir)
+    return ModelsInfoResponse(
+        models=details,
+        mv_machines=_mv_machines,
+        checkpoint_dir=manager.checkpoint_dir,
+    )
 
 
 @app.get("/models/{model_name}", response_model=ModelDetail)
@@ -331,9 +369,11 @@ async def detect_from_csv(
 
 # Checkpoint filename (without .pt) → loader class
 _MV_CHECKPOINT_LOADERS: dict[str, type] = {
-    "var_residual": VARResidualAnomalyDetector,
     "isolation_forest_mv": MultivariateIsolationForestDetector,
     "lstm_autoencoder": LSTMAutoencoderAnomalyDetector,
+    "tranad": TranADAnomalyDetector,
+    "custom_transformer_t2v": CustomTransformerDetector,
+    "var_residual": VARResidualAnomalyDetector,
     "lstm_forecaster_mv": LSTMForecasterMultivariateDetector,
 }
 

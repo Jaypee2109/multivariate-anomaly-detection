@@ -36,7 +36,7 @@ COPY dashboard/ dashboard/
 RUN pip install --no-cache-dir .
 
 # Create data/artifact directories (will be overridden by volume mounts)
-RUN mkdir -p data/raw data/processed artifacts/checkpoints mlruns
+RUN mkdir -p data/raw data/processed artifacts/checkpoints mlflow-db
 
 # ---------------------------------------------------------------------------
 # API target: FastAPI inference server
@@ -63,7 +63,7 @@ FROM base AS mlflow
 
 EXPOSE 5000
 
-CMD ["mlflow", "ui", \
+CMD ["mlflow", "server", \
      "--host", "0.0.0.0", \
      "--port", "5000", \
-     "--backend-store-uri", "/app/mlruns"]
+     "--backend-store-uri", "sqlite:////app/mlflow-db/mlflow.db"]

@@ -37,18 +37,20 @@ The SMD dataset is hosted on Kaggle. To allow automatic download you need an API
 
 ```bash
 python -m time_series_transformer data --dataset smd
+docker compose up -d mlflow          # Start MLflow server first (port 5000)
 python -m time_series_transformer train-mv --machine all --save-checkpoints --mlflow
 ```
 
 **Step 4 — Launch**
 
 ```bash
-docker compose up -d                 # Docker: API + Dashboard + MLflow
+docker compose up -d                 # Start API + Dashboard (MLflow already running)
 ```
 
 Or without Docker:
 
 ```bash
+python -m time_series_transformer mlflow &   # MLflow on :5000
 python -m time_series_transformer serve &    # API on :8000
 python -m time_series_transformer dashboard  # Dashboard on :8050
 ```

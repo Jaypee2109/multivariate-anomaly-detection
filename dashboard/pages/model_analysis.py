@@ -46,6 +46,8 @@ _DISPLAY_NAMES = {
     "isolation_forest_mv": "Isolation Forest",
     "lstm_autoencoder": "LSTM Autoencoder",
     "tranad": "TranAD",
+    "var_residual": "VAR Residual",
+    "lstm_forecaster_mv": "LSTM Forecaster",
 }
 
 

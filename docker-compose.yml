@@ -37,4 +37,4 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./mlruns:/app/mlruns
+      - ./mlflow-db:/app/mlflow-db

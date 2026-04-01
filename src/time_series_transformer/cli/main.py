@@ -9,7 +9,6 @@ import sys
 
 from time_series_transformer.config import PROJECT_ROOT
 from time_series_transformer.logging_config import setup_logging
-from time_series_transformer.mlflow_utils import MLFLOW_TRACKING_URI
 from time_series_transformer.utils.startup_checks import log_check_results, run_checks_for_command
 
 logger = logging.getLogger(__name__)
@@ -26,11 +25,13 @@ def _setup_mlflow_tracking() -> None:
 
 
 def _run_mlflow(args: argparse.Namespace) -> None:
-    """Launch MLflow UI."""
-    backend_uri = MLFLOW_TRACKING_URI
+    """Launch MLflow tracking server with SQLite backend."""
+    db_dir = PROJECT_ROOT / "mlflow-db"
+    db_dir.mkdir(parents=True, exist_ok=True)
+    backend_uri = f"sqlite:///{(db_dir / 'mlflow.db').as_posix()}"
     cmd = [
         "mlflow",
-        "ui",
+        "server",
         "--backend-store-uri",
         backend_uri,
         "--host",
@@ -38,7 +39,7 @@ def _run_mlflow(args: argparse.Namespace) -> None:
         "--port",
         str(args.port),
     ]
-    logger.info("Starting MLflow UI at http://%s:%s", args.host, args.port)
+    logger.info("Starting MLflow server at http://%s:%s", args.host, args.port)
     logger.info("Backend: %s", backend_uri)
     try:
         subprocess.run(cmd, cwd=PROJECT_ROOT)
