@@ -14,12 +14,13 @@ import mlflow
 from time_series_transformer.config import MLFLOW_EXPERIMENT_NAME, PROJECT_ROOT
 from time_series_transformer.evaluation import PointMetrics, RangeMetrics
 
-MLFLOW_TRACKING_URI = str(PROJECT_ROOT / "mlruns")
+_MLRUNS_DIR = PROJECT_ROOT / "mlruns"
+MLFLOW_TRACKING_URI = _MLRUNS_DIR.as_uri()
 
 
 def setup_mlflow() -> None:
     """Configure MLflow tracking URI and set the default experiment."""
-    Path(MLFLOW_TRACKING_URI).mkdir(parents=True, exist_ok=True)
+    _MLRUNS_DIR.mkdir(parents=True, exist_ok=True)
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
 
