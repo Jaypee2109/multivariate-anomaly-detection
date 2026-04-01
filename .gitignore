@@ -77,7 +77,6 @@ __marimo__/
 
 # MLflow
 mlflow.db
-mlflow-db/
 mlruns/
 
 # Artifacts

@@ -9,7 +9,7 @@ import sys
 
 from time_series_transformer.config import PROJECT_ROOT
 from time_series_transformer.logging_config import setup_logging
-from time_series_transformer.mlflow_utils import MLFLOW_DB_PATH
+from time_series_transformer.mlflow_utils import MLFLOW_TRACKING_URI
 from time_series_transformer.utils.startup_checks import log_check_results, run_checks_for_command
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ def _setup_mlflow_tracking() -> None:
 
 def _run_mlflow(args: argparse.Namespace) -> None:
     """Launch MLflow UI."""
-    backend_uri = f"sqlite:///{MLFLOW_DB_PATH}"
+    backend_uri = MLFLOW_TRACKING_URI
     cmd = [
         "mlflow",
         "ui",
