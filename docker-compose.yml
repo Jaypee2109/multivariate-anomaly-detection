@@ -21,8 +21,10 @@ services:
       - "8050:8050"
     volumes:
       - ./data:/app/data
+      - ./artifacts:/app/artifacts
     environment:
       - DATA_DIR=/app/data
+      - ARTIFACTS_DIR=/app/artifacts
       - ANOMALY_API_URL=http://api:8000
       - ANOMALY_WS_HOST=api:8000
     depends_on:
@@ -36,9 +38,6 @@ services:
       - "5000:5000"
     volumes:
       - ./mlruns:/app/mlruns
-      - mlflow-db:/app/db
+      - ./mlflow.db:/app/db/mlflow.db
     environment:
       - MLFLOW_BACKEND_STORE_URI=sqlite:///app/db/mlflow.db
-
-volumes:
-  mlflow-db:
