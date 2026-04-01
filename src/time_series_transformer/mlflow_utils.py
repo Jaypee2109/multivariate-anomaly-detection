@@ -14,12 +14,14 @@ import mlflow
 from time_series_transformer.config import MLFLOW_EXPERIMENT_NAME, PROJECT_ROOT
 from time_series_transformer.evaluation import PointMetrics, RangeMetrics
 
-MLFLOW_DB_PATH = PROJECT_ROOT / "mlflow.db"
+MLFLOW_DB_DIR = PROJECT_ROOT / "mlflow-db"
+MLFLOW_DB_PATH = MLFLOW_DB_DIR / "mlflow.db"
 MLFLOW_TRACKING_URI = f"sqlite:///{MLFLOW_DB_PATH}"
 
 
 def setup_mlflow() -> None:
     """Configure MLflow tracking URI and set the default experiment."""
+    MLFLOW_DB_DIR.mkdir(parents=True, exist_ok=True)
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
 
