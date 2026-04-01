@@ -15,7 +15,7 @@ Download (kagglehub) → Load (CSV walk) → Preprocess (datetime + z-score) →
 | Name            | Kaggle slug                                             |
 | --------------- | ------------------------------------------------------- |
 | `nab`           | `boltzmannbrain/nab`                                    |
-| `smd_onmiad`    | `mgusat/smd-onmiad`                                    |
+| `smd`    | `mgusat/smd-onmiad`                                    |
 | `nasa_smap_msl` | `patrickfleith/nasa-anomaly-detection-dataset-smap-msl` |
 
 Data is downloaded to `data/raw/<dataset_name>/`. On subsequent runs, the Kaggle cache is used.
@@ -45,6 +45,6 @@ Data is downloaded to `data/raw/<dataset_name>/`. On subsequent runs, the Kaggle
 
 `smd_loading.py` provides `load_smd_machine(machine_id)` for the multivariate pipeline:
 
-- Loads train/test splits and labels from `data/raw/smd_onmiad/ServerMachineDataset/`
+- Loads train/test splits and labels from `data/raw/smd/ServerMachineDataset/`
 - Returns `MachineData(train_df, test_df, test_labels)`
 - No normalisation applied (data is already in [0, 1])

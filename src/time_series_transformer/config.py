@@ -214,7 +214,7 @@ CUSTOM_TF_SCORE_METRIC = _env_str("CUSTOM_TF_SCORE_METRIC", "mse")
 # SMD dataset
 # ---------------------------------------------------------------------------
 
-SMD_RAW_DIR = RAW_DATA_DIR / "smd_onmiad" / "ServerMachineDataset"
+SMD_RAW_DIR = RAW_DATA_DIR / "smd" / "ServerMachineDataset"
 SMD_BASE_DIR = PROCESSED_DATA_DIR / "smd"
 
 # ---------------------------------------------------------------------------

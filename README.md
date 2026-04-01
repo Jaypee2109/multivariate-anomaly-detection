@@ -36,7 +36,7 @@ The SMD dataset is hosted on Kaggle. To allow automatic download you need an API
 **Step 3 — Download data and train models**
 
 ```bash
-python -m time_series_transformer data --dataset smd_onmiad
+python -m time_series_transformer data --dataset smd
 python -m time_series_transformer train-mv --machine all --save-checkpoints --mlflow
 ```
 
@@ -97,7 +97,7 @@ All commands: `python -m time_series_transformer <command>`. Run with `--help` f
 
 | Command     | Description                             | Key flags                                                |
 | ----------- | --------------------------------------- | -------------------------------------------------------- |
-| `data`      | Download and preprocess Kaggle datasets | `--dataset {nab,smd_onmiad,nasa_smap_msl}`               |
+| `data`      | Download and preprocess Kaggle datasets | `--dataset {nab,smd,nasa_smap_msl}`               |
 | `train-mv`  | Train multivariate detectors on SMD     | `--machine`, `--model`, `--save-checkpoints`, `--mlflow` |
 | `train`     | Train univariate baseline detectors     | `--csv`, `--labels`, `--save-checkpoints`                |
 | `benchmark` | Evaluate models across datasets         | `--config YAML`, `--model`, `--mlflow`                   |

@@ -25,7 +25,7 @@ Transformer/
 │   ├── raw/                       # Raw data (Kaggle downloads, git-ignored)
 │   │   ├── nab/                   #   NAB time series (univariate)
 │   │   ├── nasa_smap_msl/         #   NASA SMAP/MSL telemetry data
-│   │   └── smd_onmiad/            #   Server Machine Dataset (38 features)
+│   │   └── smd/                   #   Server Machine Dataset (38 features)
 │   ├── processed/                 # Preprocessed CSVs (standardized, datetime index)
 │   │   ├── nab/                   #   Processed NAB files
 │   │   ├── smd/                   #   SMD with named columns (train/test/test_label)

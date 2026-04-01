@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Sequence
+from contextlib import nullcontext
 from pathlib import Path
 
 import numpy as np
@@ -204,9 +205,28 @@ def run_multivariate_pipeline(
     base_dir: Path | None = None,
     model_names: Sequence[str] | None = None,
     save_checkpoints: bool = False,
+    log_to_mlflow: bool = False,
 ) -> None:
     """Train and evaluate multivariate anomaly detectors on a single SMD machine."""
     _seed_everything(RANDOM_STATE)
+
+    # MLflow setup
+    mlflow_mod = None
+    if log_to_mlflow:
+        try:
+            import mlflow
+
+            from time_series_transformer.mlflow_utils import (
+                log_anomaly_summary,
+                log_environment_info,
+                setup_mlflow,
+            )
+
+            mlflow_mod = mlflow
+            setup_mlflow()
+        except ImportError:
+            logger.warning("mlflow not installed, skipping tracking.")
+            log_to_mlflow = False
 
     if base_dir is None:
         base_dir = SMD_BASE_DIR
@@ -237,78 +257,115 @@ def run_multivariate_pipeline(
     for name, model in models.items():
         logger.info("Training %s on %s …", name, machine_id)
         safe_name = name.lower().replace(" ", "_").replace("(", "").replace(")", "")
-        try:
-            t0 = time.time()
-            model.fit(X_train)
-            fit_time = time.time() - t0
-            logger.info("  fit_time=%.2fs", fit_time)
 
-            scores = model.decision_function(X_test)
-            anomalies = model.predict(X_test)
-        except Exception as e:
-            logger.warning("  %s failed on %s: %s — skipping", name, machine_id, e)
-            continue
-
-        # Store per-model results for artifact export
-        results_df[f"{safe_name}_score"] = scores.values
-        results_df[f"{safe_name}_is_anomaly"] = anomalies.values
-
-        n_anom = int(anomalies.astype(bool).sum())
-        logger.info(
-            "  %s: flagged %d / %d (%.2f%%)",
-            name,
-            n_anom,
-            len(X_test),
-            n_anom / len(X_test) * 100,
+        run_ctx = (
+            mlflow_mod.start_run(run_name=f"{name} — {machine_id}")
+            if log_to_mlflow
+            else nullcontext()
         )
 
-        # Point-level metrics
-        pm = compute_point_metrics(y_true=y_true, y_pred=anomalies, scores=scores)
-        logger.info(
-            "  point:    P=%.4f  R=%.4f  F1=%.4f  AUC-ROC=%s  AUC-PR=%s",
-            pm.precision,
-            pm.recall,
-            pm.f1,
-            f"{pm.auc_roc:.4f}" if pm.auc_roc is not None else "N/A",
-            f"{pm.auc_pr:.4f}" if pm.auc_pr is not None else "N/A",
-        )
+        with run_ctx:
+            if log_to_mlflow:
+                log_environment_info()
+                mlflow_mod.log_params({
+                    "model": name,
+                    "machine_id": machine_id,
+                    "pipeline": "multivariate",
+                })
 
-        # Point-adjust metrics (TranAD / OmniAnomaly protocol)
-        pa = compute_point_adjust_metrics(y_true=y_true, y_pred=anomalies)
-        logger.info(
-            "  PA:       P=%.4f  R=%.4f  F1=%.4f",
-            pa.precision,
-            pa.recall,
-            pa.f1,
-        )
+            try:
+                t0 = time.time()
+                model.fit(X_train)
+                fit_time = time.time() - t0
+                logger.info("  fit_time=%.2fs", fit_time)
 
-        # Best-F1 threshold search
-        bf = compute_best_f1(y_true=y_true, scores=scores)
-        logger.info(
-            "  best-F1:  F1=%.4f (thr=%.4g)  PA-F1=%.4f",
-            bf.f1,
-            bf.threshold,
-            bf.pa_f1,
-        )
+                scores = model.decision_function(X_test)
+                anomalies = model.predict(X_test)
+            except Exception as e:
+                logger.warning("  %s failed on %s: %s — skipping", name, machine_id, e)
+                continue
 
-        # Detection latency
-        dl = compute_detection_latency(y_true=y_true, y_pred=anomalies)
-        logger.info(
-            "  latency:  mean=%.1f  median=%.1f  detected=%d/%d  missed=%d",
-            dl.mean_latency,
-            dl.median_latency,
-            dl.n_detected,
-            dl.n_segments,
-            dl.n_missed,
-        )
+            # Store per-model results for artifact export
+            results_df[f"{safe_name}_score"] = scores.values
+            results_df[f"{safe_name}_is_anomaly"] = anomalies.values
 
-        if save_checkpoints:
-            ckpt_dir = ARTIFACTS_DIR / "checkpoints" / "multivariate" / machine_id
-            ckpt_dir.mkdir(parents=True, exist_ok=True)
-            if hasattr(model, "save_checkpoint"):
-                ckpt_path = ckpt_dir / f"{safe_name}.pt"
-                model.save_checkpoint(ckpt_path)
-                logger.info("  saved checkpoint → %s", ckpt_path)
+            n_anom = int(anomalies.astype(bool).sum())
+            logger.info(
+                "  %s: flagged %d / %d (%.2f%%)",
+                name,
+                n_anom,
+                len(X_test),
+                n_anom / len(X_test) * 100,
+            )
+
+            # Point-level metrics
+            pm = compute_point_metrics(y_true=y_true, y_pred=anomalies, scores=scores)
+            logger.info(
+                "  point:    P=%.4f  R=%.4f  F1=%.4f  AUC-ROC=%s  AUC-PR=%s",
+                pm.precision,
+                pm.recall,
+                pm.f1,
+                f"{pm.auc_roc:.4f}" if pm.auc_roc is not None else "N/A",
+                f"{pm.auc_pr:.4f}" if pm.auc_pr is not None else "N/A",
+            )
+
+            # Point-adjust metrics (TranAD / OmniAnomaly protocol)
+            pa = compute_point_adjust_metrics(y_true=y_true, y_pred=anomalies)
+            logger.info(
+                "  PA:       P=%.4f  R=%.4f  F1=%.4f",
+                pa.precision,
+                pa.recall,
+                pa.f1,
+            )
+
+            # Best-F1 threshold search
+            bf = compute_best_f1(y_true=y_true, scores=scores)
+            logger.info(
+                "  best-F1:  F1=%.4f (thr=%.4g)  PA-F1=%.4f",
+                bf.f1,
+                bf.threshold,
+                bf.pa_f1,
+            )
+
+            # Detection latency
+            dl = compute_detection_latency(y_true=y_true, y_pred=anomalies)
+            logger.info(
+                "  latency:  mean=%.1f  median=%.1f  detected=%d/%d  missed=%d",
+                dl.mean_latency,
+                dl.median_latency,
+                dl.n_detected,
+                dl.n_segments,
+                dl.n_missed,
+            )
+
+            if log_to_mlflow:
+                mlflow_mod.log_metric("fit_time_seconds", fit_time)
+                log_anomaly_summary(len(y_true), n_anom)
+                mlflow_mod.log_metrics({
+                    "point_precision": pm.precision,
+                    "point_recall": pm.recall,
+                    "point_f1": pm.f1,
+                    "pa_precision": pa.precision,
+                    "pa_recall": pa.recall,
+                    "pa_f1": pa.f1,
+                    "best_f1": bf.f1,
+                    "best_f1_threshold": bf.threshold,
+                    "best_f1_pa_f1": bf.pa_f1,
+                    "detection_latency_mean": dl.mean_latency,
+                    "detection_latency_median": dl.median_latency,
+                })
+                if pm.auc_roc is not None:
+                    mlflow_mod.log_metric("auc_roc", pm.auc_roc)
+                if pm.auc_pr is not None:
+                    mlflow_mod.log_metric("auc_pr", pm.auc_pr)
+
+            if save_checkpoints:
+                ckpt_dir = ARTIFACTS_DIR / "checkpoints" / "multivariate" / machine_id
+                ckpt_dir.mkdir(parents=True, exist_ok=True)
+                if hasattr(model, "save_checkpoint"):
+                    ckpt_path = ckpt_dir / f"{safe_name}.pt"
+                    model.save_checkpoint(ckpt_path)
+                    logger.info("  saved checkpoint → %s", ckpt_path)
 
     # 4. Export results artifact for dashboard
     artifact_dir = ARTIFACTS_DIR / "multivariate"

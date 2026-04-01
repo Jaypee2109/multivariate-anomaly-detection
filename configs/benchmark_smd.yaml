@@ -2,7 +2,7 @@
 # Usage: python -m time_series_transformer benchmark --config configs/benchmark_smd.yaml
 
 dataset_type: smd
-smd_base_dir: data/raw/smd_onmiad/ServerMachineDataset
+smd_base_dir: data/raw/smd/ServerMachineDataset
 
 datasets:
   # Group 1

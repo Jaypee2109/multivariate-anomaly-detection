@@ -150,6 +150,7 @@ examples:
     # Setup MLflow only when actually needed
     needs_mlflow = (
         (args.command == "train" and args.mlflow)
+        or (args.command == "train-mv" and args.mlflow)
         or (args.command == "benchmark" and args.mlflow)
         or (args.command == "info" and args.run_id is not None)
     )

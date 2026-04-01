@@ -235,7 +235,7 @@ Kaggle ──download──> data/raw/
 
 ─── Multivariate (SMD) path ───
 
-  data/raw/smd_onmiad/ServerMachineDataset/
+  data/raw/smd/ServerMachineDataset/
                        │
               load_smd_machine(normalize=False)
                        │              ↑ SMD is pre-normalised to [0,1]

@@ -211,7 +211,7 @@ def _load_smd_config(raw: dict) -> list:
     from time_series_transformer.benchmark import MultivariateDatasetSpec
 
     base_dir = _resolve(
-        raw.get("smd_base_dir", "data/raw/smd_onmiad/ServerMachineDataset"),
+        raw.get("smd_base_dir", "data/raw/smd/ServerMachineDataset"),
     )
     specs = []
     for entry in raw["datasets"]:

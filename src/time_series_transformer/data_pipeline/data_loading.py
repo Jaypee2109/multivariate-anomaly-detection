@@ -79,5 +79,5 @@ def load_all_datasets(dataset_names: list[str]) -> dict[str, dict[str, pd.DataFr
 
 if __name__ == "__main__":
     download_all_datasets()
-    all_data = load_all_datasets(["smd_onmiad", "nasa_smap_msl", "nab"])
+    all_data = load_all_datasets(["smd", "nasa_smap_msl", "nab"])
     print({k: len(v) for k, v in all_data.items()})

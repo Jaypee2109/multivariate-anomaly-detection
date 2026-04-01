@@ -49,6 +49,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Save model checkpoints after training",
     )
     parser.add_argument(
+        "--mlflow",
+        action="store_true",
+        help="Enable MLflow experiment tracking",
+    )
+    parser.add_argument(
         "--list-machines",
         action="store_true",
         help="List available SMD machines and exit",
@@ -89,6 +94,7 @@ def run(args: argparse.Namespace) -> None:
                 base_dir=args.base_dir,
                 model_names=args.models,
                 save_checkpoints=args.save_checkpoints,
+                log_to_mlflow=args.mlflow,
             )
         except Exception as e:
             logger.error("Error on %s: %s", machine_id, e, exc_info=True)
