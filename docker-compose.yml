@@ -26,7 +26,7 @@ services:
       - DATA_DIR=/app/data
       - ARTIFACTS_DIR=/app/artifacts
       - ANOMALY_API_URL=http://api:8000
-      - ANOMALY_WS_HOST=api:8000
+      - ANOMALY_WS_HOST=localhost:8000
     depends_on:
       - api
 
