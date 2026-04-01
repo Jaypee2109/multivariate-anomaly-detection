@@ -63,7 +63,7 @@ FROM base AS mlflow
 
 EXPOSE 5000
 
-CMD ["mlflow", "server", \
+CMD ["mlflow", "ui", \
      "--host", "0.0.0.0", \
      "--port", "5000", \
      "--backend-store-uri", "sqlite:////app/mlflow-db/mlflow.db"]
